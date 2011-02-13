@@ -51,10 +51,10 @@
 //	2. enable checking on permission (rwx)
 //
 
-#define _COPYRIGHT_	"(c) 2003,2004 Tzunghsing David <wong>"
+#define _COPYRIGHT_	"(c) 2003-2011 Tzunghsing David <wong>"
 #define _DESCRIPTION_	"Command-line seek utility"
 #define _PROGRAMNAME_	"CLSeek"	/* program name */
-#define _PROGRAMVERSION_	"1.01a"	/* program version */
+#define _PROGRAMVERSION_	"1.02"	/* program version */
 #define	_ENVVARNAME_	"CLSEEKOPT"	/* environment variable name */
 
 #include <stdio.h>

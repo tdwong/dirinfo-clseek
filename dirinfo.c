@@ -10,6 +10,7 @@
 //   T. David Wong		07-03-2002    Original Author
 //   T. David Wong		05-10-2003    Fixed path delimiter, Unix shell will now use "/" instead of "\\"
 //   T. David Wong		02-07-2004    Added output function to matchCriteria
+//   T. David Wong		02-12-2011    Prevented double delimiter (e.g. F:\\Software\clseek.exe)
 //
 
 ////////////
@@ -170,14 +171,20 @@ int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, in
 
 		/* let's compose the FULL pathname */
 		/* and acquire the file status */
-		sprintf(fullname, "%s%c%s", dirname, sDelimiter, direntName);
+		// 2011-02-12 prevent double delimiter
+		if (dirname[(strlen(dirname)-1)] == sDelimiter) {
+			sprintf(fullname, "%s%s", dirname, direntName);
+		}
+		else {
+			sprintf(fullname, "%s%c%s", dirname, sDelimiter, direntName);
+		}
 		stat(fullname, &sb);
 
 		/* ***
 		 * call provided function ...
 		 * */
 		if (mcbuf && mcbuf->proc) {
-			(mcbuf->proc) (direntName, fullname, &sb, mcbuf); 
+			int rc = (mcbuf->proc) (direntName, fullname, &sb, mcbuf); 
 		}
 
 		/* brief file information */
@@ -255,6 +262,15 @@ int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, in
 	/* close the directory entry */
 	closedir(dirp);
 #endif	/* !_MSC_VER */
+
+	/* ***
+	 * call provided callback function for this directory
+	 * */
+	if (mcbuf && mcbuf->postFunc) {
+		int rc;
+		stat(dirname, &sb);
+		rc = (mcbuf->postFunc) (dirname, dirname, &sb, mcbuf); 
+	}
 
 	return count;	/* # of entries found */
 }
