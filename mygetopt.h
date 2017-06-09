@@ -8,7 +8,8 @@
 //
 // Revision History:
 //   T. David Wong		06-26-2003    Original Author
-//
+//   T. David Wong		03-30-2012    Compiled on Mac OS/X
+//   T. David Wong		06-09-2017    Exported strlwr and strupr for non-Windows system
 //
 
 #ifndef	_MYGETOPT_H_
@@ -23,6 +24,13 @@ extern "C" {
 #include <stdlib.h>
 #ifdef	_MSC_VER
 #include <winsock.h>	/* TRUE, FALSE, boolean */
+#else
+	// 2012-03-30
+#define	stricmp		strcasecmp
+#define	strnicmp	strncasecmp
+#undef	TRUE
+#define	TRUE	1
+#define	FALSE	(!TRUE)
 #endif
 
 /* */
@@ -55,6 +63,10 @@ extern void BufDump(char *buf, unsigned int size, unsigned int startaddr, FILE *
 	/* Get windows's version */
 #ifdef	_MSC_VER
 extern boolean GetWindowsVersion(unsigned int *major, unsigned int *minor);
+#endif
+#ifndef	_WIN32
+extern char *strlwr(char *str);
+extern char *strupr(char *str);
 #endif
 
 

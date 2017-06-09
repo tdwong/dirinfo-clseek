@@ -9,6 +9,7 @@
 // Revision History:
 //   T. David Wong		05-05-2005    Original Author
 //   T. David Wong		05-15-2005    Implemented and tested TESTDRIVER
+//   T. David Wong		04-02-2012    Compiled on Mac OS/X
 //
 // TODO:
 //	1. better string handle in case insensitive condition
@@ -20,6 +21,7 @@
 //
 
 #include <stdio.h>
+#include <stdlib.h>			// malloc
 #include <string.h>
 
 #include "mystropt.h"
@@ -278,6 +280,31 @@ void str_ListTable(char *desc, void *ptr)
 	fprintf(stdout, "\n");
 	return;
 }
+
+#ifndef	_WIN32
+char *strlwr(char *str)
+{
+	char *ptr = str;
+	while (*ptr) {
+		if ('A' <= *ptr && *ptr <= 'Z') {
+			*ptr += ('a' - 'A');
+		}
+		ptr++;
+	}
+	return str;
+}
+char *strupr(char *str)
+{
+	char *ptr = str;
+	while (*ptr) {
+		if ('a' <= *ptr && *ptr <= 'z') {
+			*ptr -= ('a' - 'A');
+		}
+		ptr++;
+	}
+	return str;
+}
+#endif
 
 /* ------------------------------------------------------------
  */

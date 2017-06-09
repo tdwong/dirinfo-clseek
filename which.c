@@ -7,12 +7,13 @@
 //   T. David Wong		01-17-2005    Added icon to to executable (change was actually made in which.nmak)
 //   T. David Wong		03-13-2005    Added -A, -P options, deleted -1 option
 //   T. David Wong		03-23-2005    Extented extension list to include $PATHEXT
+//   T. David Wong		03-30-2012    Compiled on Mac OS/X
 //
 
 #define _COPYRIGHT_	"(c) 2004,2005 Tzunghsing David <wong>"
 #define	_DESCRIPTION_	"Find matched executable in the search path"
 #define _PROGRAMNAME_	"which"	/* program name */
-#define _PROGRAMVERSION_	"0.32b"	/* program version */
+#define _PROGRAMVERSION_	"0.32c"	/* program version */
 
 #include <stdio.h>
 #include <stdlib.h>	// getenv
@@ -21,11 +22,22 @@
 #include "mygetopt.h"
 #include "dirinfo.h"
 
+#ifdef	_MSC_VER
+#define	PATH_DELIMITER	';'
+#else
+#define	PATH_DELIMITER	':'
+#endif
+
 /* global variables
  */
 unsigned int gFound = 0;			/* total number of matches found */
 unsigned int gDebug = 0;
-unsigned int gIgnoreExtension = 0;	/* directory entry's extension will be excluded when comparing */
+unsigned int gIgnoreExtension =		/* whether excluding directory entry's extension during comparing or not */
+#ifdef	_WIN32
+						0;			/* extension in Microsft Win32 environment */
+#else
+						1;
+#endif
 #define	EXACT_MATCH		0x01
 #define	PARTIAL_MATCH	0x02
 unsigned int gListAllMatches = 0;
@@ -176,7 +188,7 @@ int main(int argc, char** argv, char **envp)
 	while (pathp)
 	{
 		/* find next search path element */
-		if ((nextp = strchr(pathp, (int)';')) != 0) {
+		if ((nextp = strchr(pathp, (int)PATH_DELIMITER)) != 0) {
 			*nextp = 0;
 			++nextp;
 		}

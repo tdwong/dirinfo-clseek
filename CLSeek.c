@@ -45,16 +45,22 @@
 //   T. David Wong		05-18-2005    added -p (access permission) option
 //   T. David Wong		05-18-2005    fixed -s=0 when using size parsing routine
 //   T. David Wong		08-05-2006    added -w (filename length) option
+//   T. David Wong		05-03-2011    enabled debug output in dirinfo when debug leven >= 10
+//   T. David Wong		04-19-2012    enabled showing entity details (-a option)
+//   T. David Wong		02-06-2014    fixed gcc compiler warnings
+//   T. David Wong		06-08-2017    added -ah for symlink only (on non-Windows systems)
+//   T. David Wong		06-09-2017    enhanced detail output
 //
 // TODO:
 //  1. utilize mystropt library for -c, -C, -x, -X options
 //	2. enable checking on permission (rwx)
+//	3. enable ORing given options
 //
 
-#define _COPYRIGHT_	"(c) 2003-2011 Tzunghsing David <wong>"
+#define _COPYRIGHT_	"(c) 2003-2017 Tzunghsing David <wong>"
 #define _DESCRIPTION_	"Command-line seek utility"
 #define _PROGRAMNAME_	"CLSeek"	/* program name */
-#define _PROGRAMVERSION_	"1.02"	/* program version */
+#define _PROGRAMVERSION_	"1.3b"	/* program version */
 #define	_ENVVARNAME_	"CLSEEKOPT"	/* environment variable name */
 
 #include <stdio.h>
@@ -65,6 +71,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <ctype.h>		// isspace
 #if	defined(unix) || defined(__STDC__)
 #include <dirent.h>
 #include <unistd.h>
@@ -84,6 +91,8 @@
 #define ENTITY_FILE       0x0100
 #define ENTITY_DIRECTORY  0x0200
 #define ENTITY_OTHER      0x0400
+#define ENTITY_DETAILS    0x0800
+#define ENTITY_SYMLINK    0x1000
 /**/
 #define	PATH_CONTAINS	0x01
 #define PATH_EXCLUDES	0x02
@@ -108,9 +117,10 @@
 /*
  */
 #ifndef	_MSC_VER
-typedef	unsigned int	boolean;
-#endif	/* _MSC_VER */
+//typedef	unsigned int	boolean;
+#else	/* _MSC_VER */
 typedef	unsigned int	uint;
+#endif	/* _MSC_VER */
 
 /* global variables
  */
@@ -121,7 +131,7 @@ static char gPathDelimiter =
 	'/';	/* non-MSDOS */
 #endif	/* _MSC_VER */
 /**/
-uint gEntityAttribute = (ENTITY_FILE | ENTITY_DIRECTORY);
+uint gEntityAttribute = (ENTITY_FILE | ENTITY_DIRECTORY | ENTITY_SYMLINK);
 uint gLimitEntry = 0;
 boolean      gJunkPaths = 0;
 boolean      gRecursive = 0;
@@ -205,89 +215,98 @@ static void lowerStrings(char **array, int count);
 static void dumpStrings(char *msg, char **array, int count);
 static int matchStrings(char *str, char **array, int count);
 static void cancelConflicts(char **containsStr, uint containsCnt, char **excludesStr, unsigned int excludesCnt);
+static char *numericToString(size_t size, char *buffer, uint bufsize);
 
 /* program options
  */
 static void version(char *progname)
 {
-	fprintf(stderr, "%s %s, %s\n", _PROGRAMNAME_, _PROGRAMVERSION_, _COPYRIGHT_);
-	fprintf(stderr, "built at %s %s\n", __DATE__, __TIME__);
+	fprintf(stdout, "%s %s, %s\n", _PROGRAMNAME_, _PROGRAMVERSION_, _COPYRIGHT_);
+	fprintf(stdout, "built at %s %s\n", __DATE__, __TIME__);
 	return;
 }
 static void usage(char *progname, int detail)
 {
-	fprintf(stderr, "%s - %s\n", _PROGRAMNAME_, _DESCRIPTION_);
-	fprintf(stderr, "Usage: %s [options] <target directory...>\n", progname);
-	fprintf(stderr, "  -h               help\n");
-	fprintf(stderr, "  -v               version\n");
-	fprintf(stderr, "  -a[d|f]          attribute\n");
-//	fprintf(stderr, "  -f<cfg_file>     configuration file (not yet implemented)\n");
-	fprintf(stderr, "  -=<pattern>      name equals <pattern>\n");
-	fprintf(stderr, "  -b<pattern>      name begins with <pattern>\n");
-	fprintf(stderr, "  -e<pattern>      name ends with <pattern>\n");
-	fprintf(stderr, "  -c<pattern>      name contains <pattern>\n");
-	fprintf(stderr, "  -C<pattern>      path contains <pattern>\n");
-	fprintf(stderr, "     -b, -e, -c, -C are matched inclusively (match ALL to identify the entry)\n");
-	fprintf(stderr, "  -x<pattern>      name without <pattern>\n");
-	fprintf(stderr, "  -X<pattern>      path without <pattern>\n");
-	fprintf(stderr, "     -x, -X are matched exclusively (ANY match excludes the entry)\n");
-	fprintf(stderr, "  -m<regexp>       name matchs <regexp>\n");
-	fprintf(stderr, "  -M<regexp>       path matchs <regexp>\n");
-	fprintf(stderr, "  -n<path>         newer than path\n");
-	fprintf(stderr, "  -o<path>         older than path\n");
-	fprintf(stderr, "  -t(+|-)<time>    modification time constraint (s|m|h|d|w)\n");
+	fprintf(stdout, "%s - %s\n", _PROGRAMNAME_, _DESCRIPTION_);
+	fprintf(stdout, "Usage: %s [options] <target directory...>\n", progname);
+	fprintf(stdout, "  -h               help\n");
+	fprintf(stdout, "  -v               version\n");
+#if	defined(_WIN32) || defined(__CYGWIN32__)
+	fprintf(stdout, "  -a[d|f]          attribute\n");
+#else
+	fprintf(stdout, "  -a[d|f|h]        attribute\n");
+#endif	/* _WIN32 || __CYGWIN32__ */
 	if (detail)
 	{
-	fprintf(stderr, "     +             older than <time>\n");
-	fprintf(stderr, "     -             within <time>\n");
-	fprintf(stderr, "     <time>        in <NNN>(s|m|h|d|w) format\n");
+	fprintf(stdout, "    [D|F]          directory or file with details\n");
 	}
-	fprintf(stderr, "  -s(+|-|=)<size>  file size constraint (b|k|m|g)\n");
+//	fprintf(stdout, "  -f<cfg_file>     configuration file (not yet implemented)\n");
+	fprintf(stdout, "  -=<pattern>      name equals <pattern>\n");
+	fprintf(stdout, "  -b<pattern>      name begins with <pattern>\n");
+	fprintf(stdout, "  -e<pattern>      name ends with <pattern>\n");
+	fprintf(stdout, "  -c<pattern>      name contains <pattern>\n");
+	fprintf(stdout, "  -C<pattern>      path contains <pattern>\n");
+	fprintf(stdout, "     -b, -e, -c, -C are matched inclusively (match ALL to identify the entry)\n");
+	fprintf(stdout, "  -x<pattern>      name without <pattern>\n");
+	fprintf(stdout, "  -X<pattern>      path without <pattern>\n");
+	fprintf(stdout, "     -x, -X are matched exclusively (ANY match excludes the entry)\n");
+	fprintf(stdout, "  -m<regexp>       name matchs <regexp>\n");
+	fprintf(stdout, "  -M<regexp>       path matchs <regexp>\n");
+	fprintf(stdout, "  -n<path>         newer than path\n");
+	fprintf(stdout, "  -o<path>         older than path\n");
+	fprintf(stdout, "  -t(+|-)<time>    modification time constraint (s|m|h|d|w)\n");
 	if (detail)
 	{
-	fprintf(stderr, "     +             greater than <size>\n");
-	fprintf(stderr, "     -             smaller than <size>\n");
-	fprintf(stderr, "     [=]           equal to <size> (= sign is optional)\n");
-	fprintf(stderr, "     <size>        in <NNN>(b|k|m|g) format\n");
+	fprintf(stdout, "     +             older than <time>\n");
+	fprintf(stdout, "     -             within <time>\n");
+	fprintf(stdout, "     <time>        in <NNN>(s|m|h|d|w) format\n");
 	}
-	fprintf(stderr, "  -w(+|-|=)<width> file name length constraint\n");
+	fprintf(stdout, "  -s(+|-|=)<size>  file size constraint (b|k|m|g)\n");
 	if (detail)
 	{
-	fprintf(stderr, "     +             greater than <width>\n");
-	fprintf(stderr, "     -             smaller than <width>\n");
-	fprintf(stderr, "     [=]           equal to <width> (= sign is optional)\n");
-	fprintf(stderr, "     <size>        a numerical value\n");
+	fprintf(stdout, "     +             greater than <size>\n");
+	fprintf(stdout, "     -             smaller than <size>\n");
+	fprintf(stdout, "     [=]           equal to <size> (= sign is optional)\n");
+	fprintf(stdout, "     <size>        in <NNN>(b|k|m|g) format\n");
 	}
-	fprintf(stderr, "  -p(+|-)<mode>    access permission mode\n");
+	fprintf(stdout, "  -w(+|-|=)<width> file name length constraint\n");
 	if (detail)
 	{
-	fprintf(stderr, "     +             any of <mode> permission set\n");
-	fprintf(stderr, "     -             none of <mode> permission set\n");
-	fprintf(stderr, "     [=]           match exactly <mode> permission\n");
-	fprintf(stderr, "     <mode>        any combination of r,w,x\n");
+	fprintf(stdout, "     +             greater than <width>\n");
+	fprintf(stdout, "     -             smaller than <width>\n");
+	fprintf(stdout, "     [=]           equal to <width> (= sign is optional)\n");
+	fprintf(stdout, "     <size>        a numerical value\n");
 	}
-	fprintf(stderr, "  -D<path>         target directory path (ignore other target directory)\n");
-	fprintf(stderr, "  -r               recursive\n");
-	fprintf(stderr, "  -j               junk paths (do not show directory)\n");
-	fprintf(stderr, "  -l#              limit # of found entires\n");
-	fprintf(stderr, "  -i               ignore case distinctions\n");
-	fprintf(stderr, "  -I               enable case distinctions\n");
-	fprintf(stderr, "  -E<program>      execute program or command\n");
-	fprintf(stderr, "  -q               quiet mode\n");
-	fprintf(stderr, "  -d#              debug level\n");
-	fprintf(stderr, "\n");
-	fprintf(stderr, "  Option set in environment variable \"%s\" will be parsed first\n", _ENVVARNAME_);
+	fprintf(stdout, "  -p(+|-)<mode>    access permission mode\n");
 	if (detail)
 	{
-	fprintf(stderr, "\nExample:\n");
-	fprintf(stderr, "  %s -v\n", progname);
-	fprintf(stderr, "  %s -r -e.tmp %%TEMP%%\n", progname);
-	fprintf(stderr, "  %s -ctmp -Els %%TEMP%%\n", progname);
-	fprintf(stderr, "  %s -ctmp -E\"ls -l %\" %%TEMP%%\n", progname);
-	fprintf(stderr, "  %s -r -e.tmp -E\"move %% %%.junk\" %%TEMP%%\n", progname);
-	fprintf(stderr, "  %s -r -e.tmp -E\"move %% %%:r.junk\" %%TEMP%%\n", progname);
-	fprintf(stderr, "  %s -t+10d %%TEMP%%\n", progname);
-	fprintf(stderr, "  %s -s-300K %%TEMP%%\n", progname);
+	fprintf(stdout, "     +             any of <mode> permission set\n");
+	fprintf(stdout, "     -             none of <mode> permission set\n");
+	fprintf(stdout, "     [=]           match exactly <mode> permission\n");
+	fprintf(stdout, "     <mode>        any combination of r,w,x\n");
+	}
+	fprintf(stdout, "  -D<path>         target directory path (ignore other target directory)\n");
+	fprintf(stdout, "  -r               recursive\n");
+	fprintf(stdout, "  -j               junk paths (do not show directory)\n");
+	fprintf(stdout, "  -l#              limit # of found entires\n");
+	fprintf(stdout, "  -i               ignore case distinctions\n");
+	fprintf(stdout, "  -I               enable case distinctions\n");
+	fprintf(stdout, "  -E<program>      execute program or command\n");
+	fprintf(stdout, "  -q               quiet mode\n");
+	fprintf(stdout, "  -d#              debug level\n");
+	fprintf(stdout, "\n");
+	fprintf(stdout, "  Option set in environment variable \"%s\" will be parsed first\n", _ENVVARNAME_);
+	if (detail)
+	{
+	fprintf(stdout, "\nExample:\n");
+	fprintf(stdout, "  %s -v\n", progname);
+	fprintf(stdout, "  %s -r -e.tmp %%TEMP%%\n", progname);
+	fprintf(stdout, "  %s -ctmp -Els %%TEMP%%\n", progname);
+	fprintf(stdout, "  %s -ctmp -E\"ls -l %%\" %%TEMP%%\n", progname);
+	fprintf(stdout, "  %s -r -e.tmp -E\"move %% %%.junk\" %%TEMP%%\n", progname);
+	fprintf(stdout, "  %s -r -e.tmp -E\"move %% %%:r.junk\" %%TEMP%%\n", progname);
+	fprintf(stdout, "  %s -t+10d %%TEMP%%\n", progname);
+	fprintf(stdout, "  %s -s-300K %%TEMP%%\n", progname);
 	}
 	return;
 }
@@ -305,6 +324,21 @@ int win_fprintf(FILE *stream, const char * format, ...)
 	return rc;
 }
 #endif	/* _MSC_VER */
+
+/* debug output function */
+int XOutput(const int level, const char * format, ...)
+{
+	va_list argptr;
+	int rc;
+
+	/* control by global debug level */
+	if (level > (int) gDebug) return -1;
+
+	va_start(argptr, format);
+	rc = vprintf(format, argptr);
+	va_end(argptr);
+	return rc;
+}
 
 /* main program
  */
@@ -414,7 +448,13 @@ main(int argc, char **argv)
 		for (optidx = nextarg; optidx < argc; optidx++) {
 			/* make sure this is a valid directory entry */
 			if (IsDirectory(argv[optidx])) {
+				if (gDebug >= 10)
+					fprintf(stderr, "[%s]: IsDirectory\n", argv[optidx]);
 				traverse_DirTree(argv[optidx]);
+			}
+			else {
+				if (gDebug >= 10)
+					fprintf(stderr, "[%s]: IsNotDirectory\n", argv[optidx]);
 			}
 		}
 	}
@@ -601,8 +641,8 @@ static int matchTimeStamp(const char *filename, const char *fullpath, struct sta
 	}
 
 	if (gTimeDirection && gTimeRange) {
-		if (gDebug > 4) fprintf(stderr, "*** gCurrentTime= %d, gTimeRange= %d\n", gCurrentTime, gTimeRange);
-		if (gDebug > 4) fprintf(stderr, "*** mtime (%s)= %d\n", filename, statp->st_mtime);
+		if (gDebug > 4) fprintf(stderr, "*** gCurrentTime= %d, gTimeRange= %d\n", (int)gCurrentTime, (int)gTimeRange);
+		if (gDebug > 4) fprintf(stderr, "*** mtime (%s)= %d\n", filename, (int)statp->st_mtime);
 		if ((gTimeDirection == TIME_WITHIN) &&
 			((gCurrentTime - statp->st_mtime) <= (time_t)gTimeRange))
 		{
@@ -756,11 +796,17 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 	/* identify entity type */
 	if (S_ISDIR(statp->st_mode))      { attr = ENTITY_DIRECTORY; }
 	else if (S_ISREG(statp->st_mode)) { attr = ENTITY_FILE; }
+#if	!defined(_WIN32) && !defined(__CYGWIN32__)
+	else if (S_ISLNK(statp->st_mode)) { attr = ENTITY_SYMLINK; }
+#endif	/* !_WIN32 && !__CYGWIN32__ */
 
 	/* match entity attribute */
 	if ((attr & gEntityAttribute) == 0) {
 		if (gDebug > 3) fprintf(stderr, "seekCallback: mismatched attribute %s\n",
 			(attr==ENTITY_DIRECTORY)?"DIRECTORY":
+#if	!defined(_WIN32) && !defined(__CYGWIN32__)
+			(attr==ENTITY_SYMLINK)?"SYMLINK":
+#endif	/* !_WIN32 && !__CYGWIN32__ */
 			(attr==ENTITY_FILE)?"FILE":"other");
 		return 0;
 	}
@@ -815,7 +861,43 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 					printf("%s\n", (lastp == NULL) ? fullpath : ++lastp);
 				}
 				else {
-					printf("%s\n", fullpath);
+					if (gEntityAttribute & ENTITY_DETAILS) {
+						// showing entity details
+						struct tm  *tmptr = localtime(&(statp->st_mtime));
+						//
+#if	defined(_WIN32) || defined(__CYGWIN32__)
+						if (S_ISDIR(statp->st_mode)) {
+							// WIN32 directory entry has NO size
+							printf("[%04d-%02d-%02d %02d:%02d:%02d].<dir> %s\n",
+								// timestamp
+								(tmptr->tm_year+1900), (tmptr->tm_mon+1), tmptr->tm_mday,
+								tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec,
+								fullpath);
+						}
+						else
+#endif	/* _WIN32 || __CYGWIN32__ */
+						{
+						char bufSize[16];
+						printf("[%04d-%02d-%02d %02d:%02d:%02d].[%s].[%s] %s\n",
+								// timestamp
+								(tmptr->tm_year+1900), (tmptr->tm_mon+1), tmptr->tm_mday,
+								tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec,
+								// filesize
+								numericToString(statp->st_size, bufSize, sizeof(bufSize)),
+								// filetype
+								S_ISREG(statp->st_mode) ? "REG" :
+								S_ISDIR(statp->st_mode) ? "DIR" :
+#ifndef	_WIN32
+								S_ISLNK(statp->st_mode) ? "LNK" :
+								S_ISSOCK(statp->st_mode) ? "SOCK" :
+#endif	/* !_WIN32 */
+								"OTH",
+								fullpath);
+						}
+					}
+					else {
+						printf("%s\n", fullpath);
+					}
 // TODO: manage & print wide-characters
 // 					wprintf(L"-คJนา-%s\n", fullpath);
 				}
@@ -877,7 +959,7 @@ static void	show_Setting(int optptr, int argc, char **argv)
 	if (gTimeStampCriteria) {
 	fprintf(stderr, "path must be modified %s%d seconds%s\n",
 					gTimeDirection==TIME_WITHIN ? "WITHIN " : "",
-					gTimeRange,
+					(int)gTimeRange,
 					gTimeDirection==TIME_WITHIN ? "" : " AGO");
 	}
 	if (gFileSizeCriteria) {
@@ -965,6 +1047,11 @@ static void traverse_DirTree(char *dirpath)
 		pathp = dirpath;
 	}
 
+	if (gDebug) {
+		/* enable debug output */
+		mcbuf.printf=(OutputFunc)XOutput;
+	}
+
 	mcbuf.proc = seekCallback;	/* callback routine */
 	// mcbuf.printf = fdsout;			/* output routine */
 
@@ -1048,9 +1135,23 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 					else if (optptr[0] == 'f') {
 						gEntityAttribute = ENTITY_FILE;
 					}
-					else if (optptr[0] == 'b') {	/* both - default setting */
-						gEntityAttribute |= (ENTITY_FILE | ENTITY_DIRECTORY);
+					else if (optptr[0] == 'D') {
+						gEntityAttribute = ENTITY_DIRECTORY | ENTITY_DETAILS;
 					}
+					else if (optptr[0] == 'F') {
+						gEntityAttribute = ENTITY_FILE | ENTITY_DETAILS;
+					}
+					else if (optptr[0] == 'A') {	/* both - default setting */
+						gEntityAttribute |= (ENTITY_FILE | ENTITY_DIRECTORY | ENTITY_SYMLINK | ENTITY_DETAILS);
+					}
+#if	!defined(_WIN32) && !defined(__CYGWIN32__)
+					else if (optptr[0] == 'h') {
+						gEntityAttribute = ENTITY_SYMLINK;
+					}
+					else if (optptr[0] == 'H') {
+						gEntityAttribute = ENTITY_SYMLINK | ENTITY_DETAILS;
+					}
+#endif	/* !_WIN32 && !__CYGWIN32__ */
 					else {
 						fprintf(stderr, "Invalid attribute option: %s (default set to FILE)\n", (char*) optptr);
 						gEntityAttribute = ENTITY_FILE;
@@ -1227,7 +1328,7 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 			case 's':
 					/* --- file size constraint --- */
 					{
-						char *cp = strlwr(optptr);
+						char *cp = (char*) strlwr(optptr);
 						int  skip = 0;
 
 						if (gFileSizeCriteria) {
@@ -1252,7 +1353,7 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 			case 'w':
 					/* --- filename length constraint --- */
 					{
-						char *cp = strlwr(optptr);
+						char *cp = (char*) strlwr(optptr);
 						int  skip = 0;
 
 						if (gFileNameLengthCriteria) {
@@ -1931,6 +2032,49 @@ static void cancelConflicts(char **containsStr, uint containsCnt, char **exclude
 	return;
 }
 
+/* Convert a numeric value to string representation with comma(s) inserted
+ */
+static char *numericToString(size_t value, char *buffer, uint bufsize)
+{
+	char sCompact[12];
+	char *pCompact = sCompact, *pExtended = buffer;
+	uint lenCompact;
+	uint commas, leads;
+	uint ix;
+
+// binary to string
+	sprintf(sCompact, "%zu", value);
+	//-dbg- printf("value=%zu, sCompact=%s\n", value, sCompact);
+
+// compute related parameters
+	lenCompact = strlen(sCompact);
+	commas = (lenCompact-1)/3;			// # of comma(s) to insert
+	leads  = lenCompact % 3;
+	leads += (leads==0) ? 3 : 0;		// # of digits before 1st comma
+	//-dbg- printf("len=%u, commas=%u, leads=%u\n", lenCompact, commas, leads);
+
+// prepare extended buffer
+		// prefill with blanks
+	memset(buffer, (int)' ', bufsize);
+		// move ahead pointer
+	pExtended += (bufsize - (lenCompact+commas+1));		// +1 for NUL-terminator
+
+// copy sCompact to buffer with comma(s)
+	for (ix = 0; ix < leads; ix++) {
+		*pExtended++ = *pCompact++;
+	}
+	for (ix = 0; ix < commas; ix++) {
+		*pExtended++ = ',';
+		*pExtended++ = *pCompact++;
+		*pExtended++ = *pCompact++;
+		*pExtended++ = *pCompact++;
+	}
+		// NUL-terminate the buffer
+	buffer[(bufsize-1)] = 0;
+	//-dbg- printf("sExtended=%s\n", buffer);
+	return buffer;
+}
+
 #if	0
 // ---------------------------------------------------------------------------
 //	replaced by IsDirectory, IsFile, and IsValidPath in dirinfo.c
@@ -1939,7 +2083,7 @@ static int check_IfDirectory(char *path)
 {
 	struct _stat fstat;
 	int  len = strlen(path);
-
+	
 	/* condense the directory path */
 	/* remove trailing slash (/) */
 	if
@@ -1951,13 +2095,13 @@ static int check_IfDirectory(char *path)
 		{
 			path[len-1] = 0;
 		}
-
+	
 	if (gDebug > 9) fprintf(stderr, "root path= %s\n", path);
-
+	
 	/* handle drive root case - [C:] */
 	if (strlen(path) == 2 && path[1] == ':')
 		return 1;
-
+	
 	/* check if specified directory exists */
 	if (_stat(path, &fstat) != 0) {
 		// error - specified directory not found
@@ -1969,13 +2113,13 @@ static int check_IfDirectory(char *path)
 		if (gDebug > 2) fprintf(stderr, "error - %s not a directory\n", path);
 		return 0;
 	}
-
+	
 	return 1;
 }
 static int check_IfFile(char *path)
 {
 	struct _stat fstat;
-	/* check if specified directory exists */
+	/* check if specified file entry exists */
 	if (_stat(path, &fstat) != 0) {
 		// error - specified file entry not found
 		if (gDebug > 2) fprintf(stderr, "error - %s specified file entry not found\n", path);

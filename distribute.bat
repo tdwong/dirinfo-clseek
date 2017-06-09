@@ -13,7 +13,7 @@ REM
 FOR %%X IN ( %PROGS% ) DO CALL :COPY2NET %%X
 
 REM
-zip -uv %ZIPFILE% *.c *.h *nmak* *.bat *.ico
+zip -uv %ZIPFILE% *.c *.h *nmak* *.bat *.ico Makefile
 unzip -qt %ZIPFILE%
 
 REM

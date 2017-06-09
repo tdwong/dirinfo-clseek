@@ -11,6 +11,8 @@
 //   T. David Wong		05-10-2003    Fixed path delimiter, Unix shell will now use "/" instead of "\\"
 //   T. David Wong		02-07-2004    Added output function to matchCriteria
 //   T. David Wong		02-12-2011    Prevented double delimiter (e.g. F:\\Software\clseek.exe)
+//   T. David Wong		02-12-2011    Prevented double delimiter (e.g. F:\\Software\clseek.exe)
+//   T. David Wong		06-08-2017    Changed to use lstat() on non-Windows systems
 //
 
 ////////////
@@ -62,9 +64,11 @@ int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, in
 	char            fullname[PATH_MAX+1];		/* plus "\0" */
 	struct stat     sb;
 	int             count = 0;		/* for debug purpose */
-	static char     sDelimiter = 0;
+	static char     sDelimiter = 0;	/* path delimiter */
+	BOOL     		bEndDelimiter;	/* provided dirname ends with delimiter */
 	OutputFunc      dbgOutput = NULL;
 
+	/* determine delimiter */
 	if (sDelimiter == 0)
 	{
 #ifdef	_MSC_VER
@@ -74,6 +78,10 @@ int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, in
 #endif	/* _MSC_VER */
 	}
 
+	/* is provided dirname ends with a delimiter? */
+	bEndDelimiter = (dirname[(strlen(dirname)-1)] == sDelimiter) ? TRUE : FALSE;
+
+	/* enable debug output function if exists */
 	if (mcbuf && mcbuf->printf) {
 		dbgOutput = mcbuf->printf;
 	}
@@ -106,19 +114,38 @@ int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, in
 	 */
 		// strcpy(extFileName, dirname);
 		// strcat(extFileName, "\\*.*");
-		sprintf(extFileName, "%s%c*.*", dirname, sDelimiter);
-		// swprintf((wchar_t*)extFileName, (const wchar_t*)"%s%c*.*", dirname, sDelimiter);
+
+		// 2011-05-03 prevent double delimiter
+		//	FindFirstFile() doesNOT like "\\*.*" 
+		if (bEndDelimiter == TRUE) {
+			sprintf(extFileName, "%s*.*", dirname);
+		}
+		else {
+			sprintf(extFileName, "%s%c*.*", dirname, sDelimiter);
+			// swprintf((wchar_t*)extFileName, (const wchar_t*)"%s%c*.*", dirname, sDelimiter);
+		}
+
+		/* debug */
+		if (dbgOutput)
+			dbgOutput(OUT_NOISE, "extFileName: %s\n", extFileName);
 
 	/* start a search on all the files within the directory
 	 */
 		hFile = FindFirstFile(extFileName, &FileData);
 		if (hFile == INVALID_HANDLE_VALUE) {
 			if (dbgOutput)
-				dbgOutput(OUT_WARN, "%s: FindFirstFile failed (%#x)\n", dirname, hFile);
+				dbgOutput(OUT_WARN, "%s: FindFirstFile (%s) failed (%#x)\n", dirname, extFileName, hFile);
 			return -1;
 		}
-		if (dbgOutput)
-			dbgOutput(OUT_NOISE, "FindFirst[cFileName]=%s%c[%s]\n", dirname, sDelimiter, FileData.cFileName);
+		if (dbgOutput) {
+			// 2011-05-03 prevent double delimiter
+			if (bEndDelimiter == TRUE) {
+				dbgOutput(OUT_NOISE, "FindFirst[cFileName]=%s[%s]\n", dirname, FileData.cFileName);
+			}
+			else {
+				dbgOutput(OUT_NOISE, "FindFirst[cFileName]=%s%c[%s]\n", dirname, sDelimiter, FileData.cFileName);
+			}
+		}
 
 	/* handle first entry.  but don't count in '.' or '..'
 	 */
@@ -166,19 +193,28 @@ int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, in
 #endif	/* _MSC_VER */
 			continue;
 		}
+		if (dbgOutput)
+			dbgOutput(OUT_NOISE, "readdir/FindNextFile: direntName=%s\n", direntName);
 
 		count++;		/* for debug purpose */
 
 		/* let's compose the FULL pathname */
 		/* and acquire the file status */
 		// 2011-02-12 prevent double delimiter
-		if (dirname[(strlen(dirname)-1)] == sDelimiter) {
+		if (bEndDelimiter == TRUE) {
 			sprintf(fullname, "%s%s", dirname, direntName);
 		}
 		else {
 			sprintf(fullname, "%s%c%s", dirname, sDelimiter, direntName);
 		}
+#if	defined(_WIN32) || defined(__CYGWIN32__)
 		stat(fullname, &sb);
+#else
+		lstat(fullname, &sb);
+#endif	/* _WIN32 || __CYGWIN32__ */
+
+		if (dbgOutput)
+			dbgOutput(OUT_NOISE, "fullname: %s\n", fullname);
 
 		/* ***
 		 * call provided function ...
@@ -205,13 +241,18 @@ int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, in
 			dbgOutput(OUT_NOISE, "(ino=%d) name=%s [reclen=%d/off=%d]\n",
 				(unsigned int) direntp->d_ino,
 				direntp->d_name,
-#ifndef	_WIN32
 				/* these fields don't exist in Windows environment */
+				/* any not always exist in Unix environment either */
+  #ifdef _DIRENT_HAVE_D_RECLEN
 				direntp->d_reclen,
+  #else
+				0,
+  #endif
+  #ifdef _DIRENT_HAVE_D_OFF
 				(unsigned int) direntp->d_off
-#else	/* WIN32 */
-				0, 0
-#endif	/* !_WIN32 */
+  #else
+				0
+  #endif
 				 );
 #endif	/* !_MSC_VER */
 		/* file stat information */
@@ -309,7 +350,6 @@ int condense_path(char *dirpath)
 
 /* public functions
  */
-#ifdef	_MSC_VER
 #ifndef INVALID_FILE_ATTRIBUTES
 #define	INVALID_FILE_ATTRIBUTES	0xFFFFFFFF
 #endif
@@ -322,8 +362,20 @@ int condense_path(char *dirpath)
  */
 int IsValidPath(const char *path)
 {
+#ifdef	_MSC_VER
 	/* check file attribue */
 	return (GetFileAttributes(path) == INVALID_FILE_ATTRIBUTES) ? 0 : 1;
+#else
+	struct stat fstat;
+	int isValid = 0;
+	/* check if specified entry exists */
+	isValid = (stat(path, &fstat) == 0);
+//~	if (isValid == 0) {
+//~		// error - specified entry not found
+//~		if (gDebug > 2) fprintf(stderr, "error - %s specified entry not found\n", path);
+//~	}
+	return isValid;
+#endif	// _MSC_VER
 }
 /*
  * Check if provided path is a directory.
@@ -335,11 +387,26 @@ int IsValidPath(const char *path)
 int IsDirectory(const char *path)
 {
 	int isDir = 0;
-	/* check file attribue */
+#ifdef	_MSC_VER
+	/* check entry attribue */
 	DWORD dwAttrib = GetFileAttributes(path);
-	// fprintf(stdout, "FileAttributes> [%s] attrib=%#x\n", path, dwAttrib);
+	//-dbg- fprintf(stdout, "FileAttributes> [%s] attrib=%#x\n", path, dwAttrib);
 	if ((dwAttrib != (DWORD) INVALID_FILE_ATTRIBUTES)
 		&& (dwAttrib & FILE_ATTRIBUTE_DIRECTORY)) isDir++;
+#else
+	struct stat fstat;
+	/* check if specified directory entry exists */
+	if (lstat(path, &fstat) != 0) {
+//~		// error - specified directory entry not found
+//~		if (gDebug > 2) fprintf(stderr, "error - %s specified directory entry not found\n", path);
+		return isDir;
+	}
+	isDir = (fstat.st_mode & S_IFDIR);
+//~	if (!isDir) {
+//~		// error - not a directory entry
+//~		if (gDebug > 2) fprintf(stderr, "error - %s not a directory entry\n", path);
+//~	}
+#endif	// _MSC_VER
 	//
 	return isDir;
 }
@@ -353,15 +420,29 @@ int IsDirectory(const char *path)
 int IsFile(const char *path)
 {
 	int isFile = 0;
+#ifdef	_MSC_VER
 	/* check file attribue */
 	DWORD dwAttrib = GetFileAttributes(path);
 	// fprintf(stdout, "FileAttributes> [%s] attrib=%#x\n", path, dwAttrib);
 	if ((dwAttrib != (DWORD) INVALID_FILE_ATTRIBUTES)
 		&& !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY)) isFile++;
+#else
+	struct stat fstat;
+	/* check if specified file entry exists */
+	if (lstat(path, &fstat) != 0) {
+//~		// error - specified file entry not found
+//~		if (gDebug > 2) fprintf(stderr, "error - %s specified file entry not found\n", path);
+		return isFile;
+	}
+	isFile = (fstat.st_mode & S_IFREG);
+//~	if (!isFile) {
+//~		// error - not a file entry
+//~		if (gDebug > 2) fprintf(stderr, "error - %s not a file entry\n", path);
+//~	}
+#endif	// _MSC_VER
 	//
 	return isFile;
 }
-#endif	/* _MSC_VER */
 
 /*
 DWORD GetFileAttributes(

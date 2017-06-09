@@ -11,6 +11,7 @@
 //
 // Revision History:
 //   T. David Wong		07-03-2002    Original Author
+//   T. David Wong		04-17-2012    Added 'f' to list all files
 //
 /*
  */
@@ -96,6 +97,31 @@ int compareTime(const char *filename, const char *dirname, struct stat *statp, v
 	return rc;
 }
 
+// print this entry if it is a File
+int showFileEntry(const char *filename, const char *dirname, struct stat *statp, void *voidp)
+{
+	if (statp->st_mode & S_IFREG) {
+		fprintf(stderr, "*** [REG] %s\n", filename);
+		fflush(stderr);
+	}
+	return 0;
+}
+
+// print this entry if it is a Directory
+int showDirEntry(const char *filename, const char *dirname, struct stat *statp, void *voidp)
+{
+	if (statp->st_mode & S_IFDIR) {
+		fprintf(stderr, "*** [DIR] %s\n", filename);
+		fflush(stderr);
+	}
+	return 0;
+}
+
+// show program version & build time
+inline void showVersion(char *name)
+{
+	printf("%s (built at %s %s)\n", name, __DATE__, __TIME__);  
+}
 
 /* main program
  */
@@ -113,6 +139,10 @@ main(int argc, char **argv)
 		if ((strncmp(argv[1], "-d", 2)) == 0) {
 			sscanf(&argv[1][2], "%d", &gDebug);
 			argc--; argv++;
+		}
+		else if ((strncmp(argv[1], "-v", 2)) == 0) {
+			showVersion(argv[0]);
+			return 0;
 		}
 		else { /* unrecognized option */
 			break;
@@ -136,7 +166,7 @@ main(int argc, char **argv)
 	loop = 1;
 	recursive = 1;
 	do {
-		static char *prompt = "[l|b|e|c|n|o|r|d|R|x]";
+		static char *prompt = "[l|F|D|b|e|c|n|o|r|d|R|x]";
 		char ans[80];
 
 		//fprintf(stderr, "-2-resource=%c (0x%02x)\n", resource, (int)resource);
@@ -157,7 +187,10 @@ main(int argc, char **argv)
 				fprintf(stderr, "Current root directory: %s\n", destdirp);
 				fprintf(stderr, "Available options:\n");
 				fprintf(stderr, " h - show this menu\n");
+				fprintf(stderr, " v - show version\n");
 				fprintf(stderr, " l - show directory information\n");
+				fprintf(stderr, " F - show all files\n");
+				fprintf(stderr, " D - show all directories\n");
 				// fprintf(stderr, " m - search files contain specified pattern\n");
 				fprintf(stderr, " b - search files begin with specified pattern\n");
 				fprintf(stderr, " e - search files end with specified pattern\n");
@@ -168,6 +201,12 @@ main(int argc, char **argv)
 				fprintf(stderr, " d - change debug level\n");
 				fprintf(stderr, " R - toggle recursive\n");
 				fprintf(stderr, " x - quit\n");
+				}
+				break;
+
+			case 'v':
+				{
+				showVersion(argv[0]);
 				}
 				break;
 
@@ -193,7 +232,7 @@ main(int argc, char **argv)
 			case 'b':	/* search files begin with specified pattern */
 			case 'e':	/* search files end with specified pattern */
 				{
-				dirInfo_t dibuf = { 0 };
+				// dirInfo_t dibuf = { 0 };
 				matchCriteria_t mcbuf = { 0 };
 				char pattern[80];
 				fprintf(stderr, "pattern? "); fflush(stderr);
@@ -206,14 +245,14 @@ main(int argc, char **argv)
 				else break;
 				mcbuf.cparam.str = pattern;
 				mcbuf.proc = matchString;
-				dirinfo_Find(destdirp, &dibuf, &mcbuf, recursive);
+				dirinfo_Find(destdirp, NULL /*&dibuf*/, &mcbuf, recursive);
 				}
 				break;
 
 			case 'n':	/* search files with later mtime */
 			case 'o':	/* search files with earlier mtime */
 				{
-				dirInfo_t dibuf = { 0 };
+				// dirInfo_t dibuf = { 0 };
 				matchCriteria_t mcbuf = { 0 };
 				char basefile[80];
 				fprintf(stderr, "basefile? "); fflush(stderr);
@@ -233,8 +272,7 @@ main(int argc, char **argv)
 					mcbuf.cparam.time = sb.st_mtime;
 				}
 				mcbuf.proc = compareTime;
-				dirinfo_Find(destdirp, &dibuf, &mcbuf, recursive);
-				// fprintf(stderr, "not yet implemented"); fflush(stderr);
+				dirinfo_Find(destdirp, NULL /*&dibuf*/, &mcbuf, recursive);
 				}
 				break;
 
@@ -257,6 +295,27 @@ main(int argc, char **argv)
 			case 'l':	/* show directory information */
 				{
 				show_dirinfo(destdirp, recursive);
+				}
+				break;
+
+			case 'F':	/* show files */
+			case 'D':	/* show directories */
+				{
+				// dirInfo_t dibuf = { 0 };
+				matchCriteria_t mcbuf = { 0 };
+				char  path[80];
+				char *pathp = &path[0];
+				if (destdirp == NULL) {
+					printf("destination dir: ");
+					scanf("%s", path);
+				}
+				else {
+					pathp = destdirp;
+				}
+				if (resource == 'F') mcbuf.proc = showFileEntry;
+				else if (resource == 'D') mcbuf.proc = showDirEntry;
+				else break;
+				dirinfo_Find(destdirp, NULL, &mcbuf, recursive);
 				}
 				break;
 

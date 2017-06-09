@@ -10,6 +10,7 @@
 //
 // Revision History:
 //   T. David Wong		07-03-2002    Original Author
+//   T. David Wong		03-30-2012    Compiled on Mac OS/X
 //
 
 #ifndef	_DIRINFO_H_
@@ -37,6 +38,12 @@ extern "C" {
 #include <io.h>                /* for _close */
 #include <direct.h>            /* for _mkdir */
 #include "MSConfig.h"
+#else
+	// 2012-03-30
+#define	BOOL	boolean
+#undef	TRUE
+#define	TRUE	1
+#define	FALSE	(!TRUE)
 #endif
 
 
@@ -64,9 +71,10 @@ typedef struct matchCriteria {
 			void    *ptr;
 		} cparam;
 		/* information to be carried along to every entry */
-		FILEPROC    proc;	// callback
-		OutputFunc  printf;	// printf
-		void	*iblock;	// other information
+		FILEPROC	proc;		// callback for every directory entries
+		FILEPROC	postFunc;	// callback after all directory entries were visited
+		OutputFunc	printf;		// output function (e.g. printf)
+		void		*iblock;	// embedded other information
 } matchCriteria_t;
 
 
@@ -74,11 +82,9 @@ typedef struct matchCriteria {
  */
 extern int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, int recursive);
 extern void dirinfo_Report(dirInfo_t *dip, char *name);
-#ifdef	_MSC_VER
 extern int IsValidPath(const char *path);
 extern int IsDirectory(const char *path);
 extern int IsFile(const char *path);
-#endif	/* _MSC_VER */
 extern int condense_path(char *rootdir);
 
 #ifdef	__cplusplus

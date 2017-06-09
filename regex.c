@@ -19,6 +19,11 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
 
+
+//
+// 2017-06-09 : fixed OS/X clang compiler warnings
+//
+
 /* AIX requires this to be the first thing in the file. */
 #if defined (_AIX) && !defined (REGEX_MALLOC)
   #pragma alloca
@@ -1628,11 +1633,14 @@ regex_compile (pattern, size, syntax, bufp)
             case ')':
               if (syntax & RE_NO_BK_PARENS) goto normal_backslash;
 
-              if (COMPILE_STACK_EMPTY)
-                if (syntax & RE_UNMATCHED_RIGHT_PAREN_ORD)
+              if (COMPILE_STACK_EMPTY) {
+                if (syntax & RE_UNMATCHED_RIGHT_PAREN_ORD) {
                   goto normal_backslash;
-                else
+                }
+                else {
                   return REG_ERPAREN;
+                }
+              }
 
             handle_close:
               if (fixup_alt_jump)
@@ -1648,11 +1656,14 @@ regex_compile (pattern, size, syntax, bufp)
                 }
 
               /* See similar code for backslashed left paren above.  */
-              if (COMPILE_STACK_EMPTY)
-                if (syntax & RE_UNMATCHED_RIGHT_PAREN_ORD)
+              if (COMPILE_STACK_EMPTY) {
+                if (syntax & RE_UNMATCHED_RIGHT_PAREN_ORD) {
                   goto normal_char;
-                else
+                }
+                else {
                   return REG_ERPAREN;
+                }
+              }
 
               /* Since we just checked for an empty stack above, this
                  ``can't happen''.  */
@@ -2839,7 +2850,8 @@ re_set_registers (bufp, regs, num_regs, starts, ends)
     {
       bufp->regs_allocated = REGS_UNALLOCATED;
       regs->num_regs = 0;
-      regs->start = regs->end = (regoff_t) 0;
+      /* regs->start = regs->end = (regoff_t*) 0; 01-29-2018 */
+      regs->start = regs->end = (regoff_t *) NULL;
     }
 }
 
@@ -3176,7 +3188,8 @@ re_match_2 (bufp, string1, size1, string2, size2, pos, regs, stop)
 {
   /* General temporaries.  */
   /* int mcnt; 05-03-2003 */
-  unsigned mcnt;
+  /* unsigned mcnt; 01-29-2018 */
+  int mcnt;
   unsigned char *p1;
 
   /* Just past the end of the corresponding string.  */
