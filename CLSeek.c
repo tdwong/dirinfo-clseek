@@ -50,6 +50,7 @@
 //   T. David Wong		02-06-2014    fixed gcc compiler warnings
 //   T. David Wong		06-08-2017    added -ah for symlink only (on non-Windows systems)
 //   T. David Wong		06-09-2017    enhanced detail output
+//   T. David Wong		06-21-2019    added -0 to terminate with NUL character
 //
 // TODO:
 //  1. utilize mystropt library for -c, -C, -x, -X options
@@ -57,10 +58,10 @@
 //	3. enable ORing given options
 //
 
-#define _COPYRIGHT_	"(c) 2003-2017 Tzunghsing David <wong>"
+#define _COPYRIGHT_	"(c) 2003-2019 Tzunghsing David <wong>"
 #define _DESCRIPTION_	"Command-line seek utility"
 #define _PROGRAMNAME_	"CLSeek"	/* program name */
-#define _PROGRAMVERSION_	"1.3b"	/* program version */
+#define _PROGRAMVERSION_	"1.3c"	/* program version */
 #define	_ENVVARNAME_	"CLSEEKOPT"	/* environment variable name */
 
 #include <stdio.h>
@@ -136,7 +137,8 @@ uint gLimitEntry = 0;
 boolean      gJunkPaths = 0;
 boolean      gRecursive = 0;
 boolean      gQuietMode = 0;
-boolean      gIgnoreCase =
+boolean      gNulTerminator = 0;
+boolean      gIgnoreCase =      //* default is determined by OS type
 #ifdef	_MSC_VER
 			1;	// case insensitive
 #else
@@ -293,6 +295,7 @@ static void usage(char *progname, int detail)
 	fprintf(stdout, "  -I               enable case distinctions\n");
 	fprintf(stdout, "  -E<program>      execute program or command\n");
 	fprintf(stdout, "  -q               quiet mode\n");
+	fprintf(stdout, "  -0               use NUL instead of NL as terminator\n");
 	fprintf(stdout, "  -d#              debug level\n");
 	fprintf(stdout, "\n");
 	fprintf(stdout, "  Option set in environment variable \"%s\" will be parsed first\n", _ENVVARNAME_);
@@ -858,7 +861,8 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 			if (gQuietMode == 0) {
 				if (gJunkPaths) {
 					char *lastp = strrchr(fullpath, (int)gPathDelimiter);
-					printf("%s\n", (lastp == NULL) ? fullpath : ++lastp);
+					printf("%s", (lastp == NULL) ? fullpath : ++lastp);
+                    putc(gNulTerminator ? (int)'\0' : (int)'\n', stdout);
 				}
 				else {
 					if (gEntityAttribute & ENTITY_DETAILS) {
@@ -868,17 +872,19 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 #if	defined(_WIN32) || defined(__CYGWIN32__)
 						if (S_ISDIR(statp->st_mode)) {
 							// WIN32 directory entry has NO size
-							printf("[%04d-%02d-%02d %02d:%02d:%02d].<dir> %s\n",
+							printf("[%04d-%02d-%02d %02d:%02d:%02d].<dir> %s",
 								// timestamp
 								(tmptr->tm_year+1900), (tmptr->tm_mon+1), tmptr->tm_mday,
 								tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec,
 								fullpath);
+                            putc(gNulTerminator ? (int)'\0' : (int)'\n', stdout);
 						}
 						else
 #endif	/* _WIN32 || __CYGWIN32__ */
 						{
-						char bufSize[16];
-						printf("[%04d-%02d-%02d %02d:%02d:%02d].[%s].[%s] %s\n",
+						    char bufSize[16];
+//                                  <--------- timestamp ---------> <FS> <FY> <name>
+						    printf("[%04d-%02d-%02d %02d:%02d:%02d].[%s].[%s] %s",
 								// timestamp
 								(tmptr->tm_year+1900), (tmptr->tm_mon+1), tmptr->tm_mday,
 								tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec,
@@ -893,10 +899,12 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 #endif	/* !_WIN32 */
 								"OTH",
 								fullpath);
+                            putc(gNulTerminator ? (int)'\0' : (int)'\n', stdout);
 						}
 					}
 					else {
-						printf("%s\n", fullpath);
+						printf("%s", fullpath);
+                        putc(gNulTerminator ? (int)'\0' : (int)'\n', stdout);
 					}
 // TODO: manage & print wide-characters
 // 					wprintf(L"-คJนา-%s\n", fullpath);
@@ -1119,7 +1127,7 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 	 */
 	optptr = NULL;
 	// while ((c = getopt(argc, argv, "abo:")) != EOF)
-	while ((optcode = fds_getopt(&optptr, "?hva:=:b:c:e:x:m:n:o:C:X:M:t:s:w:p:D:jl:rRiIE:qd:", argc, argv)) != EOF)
+	while ((optcode = fds_getopt(&optptr, "?hva:=:b:c:e:x:m:n:o:C:X:M:t:s:w:p:D:jl:rRiIE:q0d:", argc, argv)) != EOF)
 	{
 		//-dbg- printf("optcode=%c *optptr=%c\n", optcode, *optptr);
 		switch (optcode) {
@@ -1415,6 +1423,9 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 
 			/* enable quiet mode */
 			case 'q':  gQuietMode++;	break;
+
+			/* enable NUL terminator */
+			case '0':  gNulTerminator++;	break;
 
 			/* set up external program */
 			case 'E':

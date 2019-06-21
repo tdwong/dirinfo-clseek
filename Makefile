@@ -99,18 +99,22 @@ clean-all distclean:	clean
 	$(RM) -v $(LIBS)
 #	$(RM) -v $(EXES)
 	$(RM) -rv *.dSYM *.exe
+	$(RM) -v cscope.out tags
 
 # ---
-ARCHIVE=CLSeek-$(VER).zip
+#ARCHIVE=CLSeek-$(VERSION).zip
+ARCHIVE=CLSeek-$(shell grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2).zip
 
 .PHONY: distribute tarball echo
 distribute tarball:
 	@echo "creating archive: $(ARCHIVE)..."
-	@zip -qu CLSeek-`grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2`.zip $(ALL_SRCS) *.h *nmak* *.bat *.ico Makefile
+#	@zip -qu CLSeek-`grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2`.zip $(ALL_SRCS) *.h *nmak* *.bat *.ico Makefile
+	@zip -qu $(ARCHIVE) $(ALL_SRCS) *.h *nmak* *.bat *.ico Makefile
 
+VERSION := $(shell grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2)
 echo:
-	@VER=`grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2`
-	@echo VER=$(VER)
+	@echo VERSION=$(VERSION)
+	@echo -n "VER="; grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2
 
 # ~~~
 
