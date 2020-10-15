@@ -51,6 +51,7 @@
 //   T. David Wong		06-08-2017    added -ah for symlink only (on non-Windows systems)
 //   T. David Wong		06-09-2017    enhanced detail output
 //   T. David Wong		06-21-2019    added -0 to terminate with NUL character
+//   T. David Wong		10-01-2020    added -y & -z to extend -x functionality
 //
 // TODO:
 //  1. utilize mystropt library for -c, -C, -x, -X options
@@ -58,10 +59,10 @@
 //	3. enable ORing given options
 //
 
-#define _COPYRIGHT_	"(c) 2003-2019 Tzunghsing David <wong>"
+#define _COPYRIGHT_	"(c) 2003-2020 Tzunghsing David <wong>"
 #define _DESCRIPTION_	"Command-line seek utility"
 #define _PROGRAMNAME_	"CLSeek"	/* program name */
-#define _PROGRAMVERSION_	"1.3c"	/* program version */
+#define _PROGRAMVERSION_	"1.4j"	/* program version */
 #define	_ENVVARNAME_	"CLSEEKOPT"	/* environment variable name */
 
 #include <stdio.h>
@@ -153,6 +154,10 @@ uint gPathNameCriteria = 0;
 	char *gNameEnds     = NULL;
 	char **gNameExcludesStr = NULL;
 	uint gNameExcludesCnt = 0;
+	char **gNameExcludesBeginStr = NULL;
+	uint gNameExcludesBeginCnt = 0;
+	char **gNameExcludesEndStr = NULL;
+	uint gNameExcludesEndCnt = 0;
 	char **gPathContainsStr = NULL;
 	uint gPathContainsCnt = 0;
 	char **gPathExcludesStr = NULL;
@@ -213,6 +218,7 @@ static int parsePermissionConstraint(int option, char *str);
 static char *composeExternalCommand(const char* fullpath);
 static char *keepLongerString(char *str, char **array, int count);
 static char *keepShorterString(char *str, char **array, int count);
+static char *keepShorterEndString(char *str, char **array, int count);
 static void lowerStrings(char **array, int count);
 static void dumpStrings(char *msg, char **array, int count);
 static int matchStrings(char *str, char **array, int count);
@@ -250,6 +256,8 @@ static void usage(char *progname, int detail)
 	fprintf(stdout, "  -C<pattern>      path contains <pattern>\n");
 	fprintf(stdout, "     -b, -e, -c, -C are matched inclusively (match ALL to identify the entry)\n");
 	fprintf(stdout, "  -x<pattern>      name without <pattern>\n");
+	fprintf(stdout, "  -y<pattern>      name not begins with <pattern>\n");
+	fprintf(stdout, "  -z<pattern>      name not ends  with <pattern>\n");
 	fprintf(stdout, "  -X<pattern>      path without <pattern>\n");
 	fprintf(stdout, "     -x, -X are matched exclusively (ANY match excludes the entry)\n");
 	fprintf(stdout, "  -m<regexp>       name matchs <regexp>\n");
@@ -490,18 +498,44 @@ static int matchNameString(const char *filename, const char *fullpath)
 	int flen = strlen(filename);
 	int (*cmpfunc)();
 
+	/* select appropriate compare function */
+	cmpfunc = gIgnoreCase ? strnicmp : strncmp;
+
 	/* cases that may exclude this entry
 	 * */
 	if (gNameExcludesCnt) {
 		char *dupname = strdup(filename);
 		if (gIgnoreCase) strlwr(dupname);
-		if ((exclude = matchStrings(dupname, gNameExcludesStr, gNameExcludesCnt)) == 0) {
-			match++;
-		}
+		exclude = matchStrings(dupname, gNameExcludesStr, gNameExcludesCnt);
+		if (exclude == 0) match++;
+		// if (gDebug > 2) fprintf(stderr, "%s is excluded, exclude=%d\n", filename, exclude);
 		free(dupname);
 	}
+	if (gNameExcludesBeginCnt) {
+		int ix;
+		for (ix = 0; ix < gNameExcludesBeginCnt; ix++) {
+			if (cmpfunc(filename, gNameExcludesBeginStr[ix], strlen(gNameExcludesBeginStr[ix])) == 0) {
+				// if (gDebug > 2) fprintf(stderr, "*** excludes %s begins [%s]\n", filename, gNameExcludesBeginStr[ix]);
+				exclude++;
+				break;
+			}
+		}
+		if (exclude == 0) match++;
+	}
+	if (gNameExcludesEndCnt) {
+		int ix;
+		for (ix = 0; ix < gNameExcludesEndCnt; ix++) {
+			int slen = strlen(gNameExcludesEndStr[ix]);
+			if (cmpfunc(&filename[flen-slen], gNameExcludesEndStr[ix], slen) == 0) {
+				// if (gDebug > 2) fprintf(stderr, "*** excludes %s ends [%s]\n", filename, gNameExcludesEndStr[ix]);
+				exclude++;
+				break;
+			}
+		}
+		if (exclude == 0) match++;
+	}
 	if (exclude) {
-		if (gDebug > 2) fprintf(stderr, "%s: excluded by -x\n", filename);
+		if (gDebug > 2) fprintf(stderr, "%s: excluded by -x or -y or -z\n", filename);
 		return 0;
 	}
 
@@ -535,9 +569,6 @@ static int matchNameString(const char *filename, const char *fullpath)
 		free(dupname);
 	}
 	if (exclude) return 0;
-
-	/* select appropriate compare function */
-	cmpfunc = gIgnoreCase ? strnicmp : strncmp;
 
 	if (gNameEquals) {
 		/* find any condition could exclude this entry */
@@ -862,7 +893,7 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 				if (gJunkPaths) {
 					char *lastp = strrchr(fullpath, (int)gPathDelimiter);
 					printf("%s", (lastp == NULL) ? fullpath : ++lastp);
-                    putc(gNulTerminator ? (int)'\0' : (int)'\n', stdout);
+					putc(gNulTerminator ? (int)'\0' : (int)'\n', stdout);
 				}
 				else {
 					if (gEntityAttribute & ENTITY_DETAILS) {
@@ -877,14 +908,14 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 								(tmptr->tm_year+1900), (tmptr->tm_mon+1), tmptr->tm_mday,
 								tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec,
 								fullpath);
-                            putc(gNulTerminator ? (int)'\0' : (int)'\n', stdout);
+							putc(gNulTerminator ? (int)'\0' : (int)'\n', stdout);
 						}
 						else
 #endif	/* _WIN32 || __CYGWIN32__ */
 						{
-						    char bufSize[16];
-//                                  <--------- timestamp ---------> <FS> <FY> <name>
-						    printf("[%04d-%02d-%02d %02d:%02d:%02d].[%s].[%s] %s",
+							char bufSize[16];
+//									<--------- timestamp ---------> <FS> <FY> <name>
+							printf("[%04d-%02d-%02d %02d:%02d:%02d].[%s].[%s] %s",
 								// timestamp
 								(tmptr->tm_year+1900), (tmptr->tm_mon+1), tmptr->tm_mday,
 								tmptr->tm_hour, tmptr->tm_min, tmptr->tm_sec,
@@ -899,15 +930,15 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 #endif	/* !_WIN32 */
 								"OTH",
 								fullpath);
-                            putc(gNulTerminator ? (int)'\0' : (int)'\n', stdout);
+							putc(gNulTerminator ? (int)'\0' : (int)'\n', stdout);
 						}
 					}
 					else {
 						printf("%s", fullpath);
-                        putc(gNulTerminator ? (int)'\0' : (int)'\n', stdout);
+						putc(gNulTerminator ? (int)'\0' : (int)'\n', stdout);
 					}
 // TODO: manage & print wide-characters
-// 					wprintf(L"-入境-%s\n", fullpath);
+//					wprintf(L"-入境-%s\n", fullpath);
 				}
 			}
 		}
@@ -1030,9 +1061,11 @@ static void check_Setting()
 	if (gIgnoreCase) {
 		if (gNameEquals) strlwr(gNameEquals);
 		if (gNameBegins) strlwr(gNameBegins);
-		if (gNameEnds) strlwr(gNameEnds);
+		if (gNameEnds)   strlwr(gNameEnds);
 		if (gNameContainsCnt) lowerStrings(gNameContainsStr, gNameContainsCnt);
 		if (gNameExcludesCnt) lowerStrings(gNameExcludesStr, gNameExcludesCnt);
+		if (gNameExcludesBeginCnt) lowerStrings(gNameExcludesBeginStr, gNameExcludesBeginCnt);
+		if (gNameExcludesEndCnt)   lowerStrings(gNameExcludesEndStr,   gNameExcludesEndCnt);
 		if (gPathContainsCnt) lowerStrings(gPathContainsStr, gPathContainsCnt);
 		if (gPathExcludesCnt) lowerStrings(gPathExcludesStr, gPathExcludesCnt);
 	}
@@ -1127,7 +1160,7 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 	 */
 	optptr = NULL;
 	// while ((c = getopt(argc, argv, "abo:")) != EOF)
-	while ((optcode = fds_getopt(&optptr, "?hva:=:b:c:e:x:m:n:o:C:X:M:t:s:w:p:D:jl:rRiIE:q0d:", argc, argv)) != EOF)
+	while ((optcode = fds_getopt(&optptr, "?hva:=:b:c:e:x:y:z:m:n:o:C:X:M:t:s:w:p:D:jl:rRiIE:q0d:", argc, argv)) != EOF)
 	{
 		//-dbg- printf("optcode=%c *optptr=%c\n", optcode, *optptr);
 		switch (optcode) {
@@ -1206,6 +1239,34 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 							if (gNameExcludesCnt == 0) gPathNameCriteria++;
 							gNameExcludesStr = (char **) realloc(gNameExcludesStr, (++gNameExcludesCnt)*sizeof(char*));
 							gNameExcludesStr[(gNameExcludesCnt-1)] = optptr;
+						}
+						else {
+							fprintf(stderr, "-%c%s: redundant option ignored\n", optcode, optptr);
+						}
+						break;
+					}
+			case 'y':
+					{
+						/* check duplication */
+						if (keepShorterString(optptr, gNameExcludesBeginStr, gNameExcludesBeginCnt) == NULL) {
+							/* count as ONE criterion */
+							if (gNameExcludesBeginCnt == 0) gPathNameCriteria++;
+							gNameExcludesBeginStr = (char **) realloc(gNameExcludesBeginStr, (++gNameExcludesBeginCnt)*sizeof(char*));
+							gNameExcludesBeginStr[(gNameExcludesBeginCnt-1)] = optptr;
+						}
+						else {
+							fprintf(stderr, "-%c%s: redundant option ignored\n", optcode, optptr);
+						}
+						break;
+					}
+			case 'z':
+					{
+						/* check duplication */
+						if (keepShorterEndString(optptr, gNameExcludesEndStr, gNameExcludesEndCnt) == NULL) {
+							/* count as ONE criterion */
+							if (gNameExcludesEndCnt == 0) gPathNameCriteria++;
+							gNameExcludesEndStr = (char **) realloc(gNameExcludesEndStr, (++gNameExcludesEndCnt)*sizeof(char*));
+							gNameExcludesEndStr[(gNameExcludesEndCnt-1)] = optptr;
 						}
 						else {
 							fprintf(stderr, "-%c%s: redundant option ignored\n", optcode, optptr);
@@ -1980,6 +2041,14 @@ static char *keepLongerString(char *str, char **array, int count)
 
 /* Find a (partially) matched string in the "array".
  * If the "str" is being contained by one of the elememnt in the "array" (shorter), the element will be replaced.
+ *
+ * return NULL indicates the "str" is an unique pattern
+ *
+ * In exclusion case, a shorter string should be used for matching,
+ * e.g. when given excluding patterns are "string" & "str", using "str" can match all of the following but "string" matches only one
+ *	- string_a
+ *	- a_str
+ *	- not_strong_case
  */
 static char *keepShorterString(char *str, char **array, int count)
 {
@@ -1992,13 +2061,55 @@ static char *keepShorterString(char *str, char **array, int count)
 
 		/* if the str is a sub-string of the current element, REPLACE the element */
 		if (((strlen(array[ix]) > slen) && strstr(array[ix], str))) {
-			char *sptr;
-			sptr = array[ix];
+			char *sptr = array[ix];
 			array[ix] = str;
 			//-dbg- printf("str=%s, array[%d]=%s\n", str, ix, array[ix]);
 			return sptr;
 		}
 	}
+	// the given str is considered an *UNIQUE* pattern
+	return NULL;
+}
+
+/* Find a (partially) matched-from-the-end string in the "array".
+ * If the "str" is being contained by one of the elememnt in the "array" (shorter), the element will be replaced.
+ *
+ * return NULL indicates the "str" is an unique pattern
+ *
+ * In exclusion case, a shorter string should be used for matching,
+ * e.g. if given excluding patterns ".cpp" and ".c", they must be treated differently
+ #	  but "xx" will cover ".cxx" and ".hxx" patterns
+ */
+static char *keepShorterEndString(char *str, char **array, int count)
+{
+	int ix;
+	uint slen = strlen(str);
+	for (ix = 0; ix < count; ix++) {
+		/* if str is a sub-string of the current element, we punt */
+		//-dbg- printf("str=%s, array[%d]=%s\n", str, ix, array[ix]);
+		uint alen = strlen(array[ix]);
+
+		// ignore the str if
+		// - the str is longer or of same length, and
+		// - array element pattern matches the str from the end
+		if ((slen >= alen) &&
+			(strncmp(&str[slen-alen], array[ix], alen) == 0)) {
+			return str;
+		}
+
+		// replace the str if
+		// - the str is shorter and
+		// - the str matches array element pattern from the end
+		/* if the str is a sub-string of the current element, REPLACE the element */
+		if ((slen < alen) &&
+			(strncmp(str, &array[ix][alen-slen], slen) == 0)) {
+			char *sptr = array[ix];
+			array[ix] = str;
+			//-dbg- printf("str=%s, array[%d]=%s\n", str, ix, array[ix]);
+			return sptr;
+		}
+	}
+	// the given str is considered an *UNIQUE* pattern
 	return NULL;
 }
 
