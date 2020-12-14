@@ -364,6 +364,9 @@ void BufDump(char *buf, unsigned int size, unsigned int startaddr, FILE *ofd)
 }
 
 #ifdef	_MSC_VER
+	// mygetopt.c(405) : warning C4996: 'GetVersionExA': was declared deprecated
+	// C:\Program Files\Windows Kits\8.1\include\um\sysinfoapi.h(433) : see declaration of 'GetVersionExA'
+#pragma warning(disable: 4996)		// to disable C4996 warning
 boolean GetWindowsVersion(unsigned int *major, unsigned int *minor)
 {
 /*

@@ -24,6 +24,11 @@ extern "C" {
 #include <stdlib.h>
 #ifdef	_MSC_VER
 #include <winsock.h>	/* TRUE, FALSE, boolean */
+	//https://sourceforge.net/p/predef/wiki/Compilers/
+	#if	(_MSC_VER >= 1800)
+	// mygetopt.c(405) : warning C4996: 'GetVersionExA': was declared deprecated
+    //	C:\Program Files\Windows Kits\8.1\include\um\sysinfoapi.h(433) : see declaration of 'GetVersionExA'
+	#endif
 #else
 	// 2012-03-30
 #define	stricmp		strcasecmp

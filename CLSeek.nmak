@@ -63,7 +63,8 @@ ALL : "$(OUTDIR)\$(TARGET).exe"
 <<
 	rm -f $(CFG)/vc60.* $(CFG)/vc120.*
 !IF  "$(CFG)" == "Debug"
-	cp -fv $(CFG)/$(TARGET).pdb $(CFG)/vc60.pdb $(CFG)/vc120.pdb
+##	cp -fv $(CFG)/$(TARGET).pdb $(CFG)/vc60.pdb
+	cp -fv $(CFG)/$(TARGET).pdb $(CFG)/vc120.pdb
 !ENDIF
 
 !IF "$(MYICON)" != ""

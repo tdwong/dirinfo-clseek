@@ -22,6 +22,12 @@ extern "C" {
 #include <string.h>
 #ifdef	_MSC_VER
 #include <winsock.h>	/* TRUE, FALSE, boolean */
+	//https://sourceforge.net/p/predef/wiki/Compilers/
+	#if	(_MSC_VER >= 1800)
+	#define	strdup	_strdup
+	#define	stricmp	_stricmp
+	#define	strlwr	_strlwr
+	#endif
 #endif
 
 /* */

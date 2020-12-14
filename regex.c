@@ -3189,7 +3189,7 @@ re_match_2 (bufp, string1, size1, string2, size2, pos, regs, stop)
   /* General temporaries.  */
   /* int mcnt; 05-03-2003 */
   /* unsigned mcnt; 01-29-2018 */
-  int mcnt;
+  unsigned int mcnt;
   unsigned char *p1;
 
   /* Just past the end of the corresponding string.  */

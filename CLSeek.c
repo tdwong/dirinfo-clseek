@@ -62,7 +62,7 @@
 #define _COPYRIGHT_	"(c) 2003-2020 Tzunghsing David <wong>"
 #define _DESCRIPTION_	"Command-line seek utility"
 #define _PROGRAMNAME_	"CLSeek"	/* program name */
-#define _PROGRAMVERSION_	"1.4j"	/* program version */
+#define _PROGRAMVERSION_	"1.4k"	/* program version */
 #define	_ENVVARNAME_	"CLSEEKOPT"	/* environment variable name */
 
 #include <stdio.h>
@@ -70,6 +70,7 @@
 #include <wchar.h>
 #endif	/* _MSC_VER */
 #include <string.h>
+#include <stdint.h>		// uint32_t
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>
@@ -82,6 +83,15 @@
 #include "mygetopt.h"
 #include "dirinfo.h"
 #include "regex.h"
+
+	// redefinition after all #include's
+	//https://sourceforge.net/p/predef/wiki/Compilers/
+	#if	(_MSC_VER >= 1800)
+	#define	strdup		_strdup
+	#define	strlwr		_strlwr
+	#define	stricmp		_stricmp
+	#define	strnicmp	_strnicmp
+	#endif
 
 /* defined constants for matchCriteria */
 #define	WILDCARD          0x0000
@@ -512,7 +522,7 @@ static int matchNameString(const char *filename, const char *fullpath)
 		free(dupname);
 	}
 	if (gNameExcludesBeginCnt) {
-		int ix;
+		uint32_t ix;
 		for (ix = 0; ix < gNameExcludesBeginCnt; ix++) {
 			if (cmpfunc(filename, gNameExcludesBeginStr[ix], strlen(gNameExcludesBeginStr[ix])) == 0) {
 				// if (gDebug > 2) fprintf(stderr, "*** excludes %s begins [%s]\n", filename, gNameExcludesBeginStr[ix]);
@@ -523,7 +533,7 @@ static int matchNameString(const char *filename, const char *fullpath)
 		if (exclude == 0) match++;
 	}
 	if (gNameExcludesEndCnt) {
-		int ix;
+		uint32_t ix;
 		for (ix = 0; ix < gNameExcludesEndCnt; ix++) {
 			int slen = strlen(gNameExcludesEndStr[ix]);
 			if (cmpfunc(&filename[flen-slen], gNameExcludesEndStr[ix], slen) == 0) {
