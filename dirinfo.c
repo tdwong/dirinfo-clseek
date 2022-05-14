@@ -51,7 +51,7 @@
  * - Collected statistics will be recorded in dirInfo structure.
  * - Depends on the recursive flag, this function could recursively calls itself.
  */
-int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, int recursive)
+int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, int recursive, int maxLevel, int curLevel)
 {
 #ifdef	_MSC_VER
 	HANDLE          hFile = NULL;	/* Find file handle */
@@ -278,11 +278,21 @@ int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, in
 		/* recursive ... */
 		if (recursive && S_ISDIR(sb.st_mode))
 		{
-			/* depth first */
-			/* the directory could have been removed by the callback
-			 * but the call will return with error when opendir() fails
-			 */
-			int rc = dirinfo_Find(fullname, dip, mcbuf, recursive);
+
+			if (dbgOutput) {
+				dbgOutput(OUT_NOISE, "%s: maxLevel=%d, curLevel=%d\n", __FUNCTION__, maxLevel, curLevel);
+			}
+
+			// 2022-04-07 limit max sub-directory depth */
+			if ((maxLevel == 0) || (curLevel < maxLevel)) {
+
+				/* depth first */
+				/* the directory could have been removed by the callback
+				 * but the call will return with error when opendir() fails
+				 */
+				int rc = dirinfo_Find(fullname, dip, mcbuf, recursive, maxLevel, curLevel+1);
+
+			}
 		}
 
 #ifdef	_MSC_VER

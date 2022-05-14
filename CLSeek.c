@@ -52,6 +52,7 @@
 //   T. David Wong		06-09-2017    enhanced detail output
 //   T. David Wong		06-21-2019    added -0 to terminate with NUL character
 //   T. David Wong		10-01-2020    added -y & -z to extend -x functionality
+//   T. David Wong		04-07-2022    added -L (limit directory level) option
 //
 // TODO:
 //  1. utilize mystropt library for -c, -C, -x, -X options
@@ -59,10 +60,10 @@
 //	3. enable ORing given options
 //
 
-#define _COPYRIGHT_	"(c) 2003-2020 Tzunghsing David <wong>"
+#define _COPYRIGHT_	"(c) 2003-2022 Tzunghsing David <wong>"
 #define _DESCRIPTION_	"Command-line seek utility"
 #define _PROGRAMNAME_	"CLSeek"	/* program name */
-#define _PROGRAMVERSION_	"1.4k"	/* program version */
+#define _PROGRAMVERSION_	"1.5b"	/* program version */
 #define	_ENVVARNAME_	"CLSEEKOPT"	/* environment variable name */
 
 #include <stdio.h>
@@ -145,6 +146,7 @@ static char gPathDelimiter =
 /**/
 uint gEntityAttribute = (ENTITY_FILE | ENTITY_DIRECTORY | ENTITY_SYMLINK);
 uint gLimitEntry = 0;
+uint gLimitDirLevel = 0;
 boolean      gJunkPaths = 0;
 boolean      gRecursive = 0;
 boolean      gQuietMode = 0;
@@ -309,6 +311,7 @@ static void usage(char *progname, int detail)
 	fprintf(stdout, "  -r               recursive\n");
 	fprintf(stdout, "  -j               junk paths (do not show directory)\n");
 	fprintf(stdout, "  -l#              limit # of found entires\n");
+	fprintf(stdout, "  -L#              limit directory depth/level\n");
 	fprintf(stdout, "  -i               ignore case distinctions\n");
 	fprintf(stdout, "  -I               enable case distinctions\n");
 	fprintf(stdout, "  -E<program>      execute program or command\n");
@@ -992,6 +995,7 @@ static void	show_Setting(int optptr, int argc, char **argv)
 	fprintf(stderr, "ignore case:          %s\n", gIgnoreCase ? "TRUE" : "FALSE");
 	fprintf(stderr, "junk output path:     %s\n", gJunkPaths ? "TRUE" : "FALSE");
 	fprintf(stderr, "recursive mode:       %s\n", gRecursive ? "TRUE" : "FALSE");
+	fprintf(stderr, "limit directory level:%d (0 = unlimited)\n", gLimitDirLevel);
 	fprintf(stderr, "quiet mode:           %s\n", gQuietMode ? "TRUE" : "FALSE");
 	fprintf(stderr, "name equals with:     %s\n", gNameEquals ? gNameEquals : "");
 	fprintf(stderr, "name begins with:     %s\n", gNameBegins ? gNameBegins : "");
@@ -1107,7 +1111,7 @@ static void traverse_DirTree(char *dirpath)
 	// mcbuf.printf = fdsout;			/* output routine */
 
 	/* search directory info */
-	dirinfo_Find(pathp, &dibuf, &mcbuf, (int) gRecursive);
+	dirinfo_Find(pathp, &dibuf, &mcbuf, (int) gRecursive, (int) gLimitDirLevel, 1 /*current dir level*/);
 
 	/* closing report */
 	if (gDebug > 4) {
@@ -1170,7 +1174,7 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 	 */
 	optptr = NULL;
 	// while ((c = getopt(argc, argv, "abo:")) != EOF)
-	while ((optcode = fds_getopt(&optptr, "?hva:=:b:c:e:x:y:z:m:n:o:C:X:M:t:s:w:p:D:jl:rRiIE:q0d:", argc, argv)) != EOF)
+	while ((optcode = fds_getopt(&optptr, "?hva:=:b:c:e:x:y:z:m:n:o:C:X:M:t:s:w:p:D:jl:L:rRiIE:q0d:", argc, argv)) != EOF)
 	{
 		//-dbg- printf("optcode=%c *optptr=%c\n", optcode, *optptr);
 		switch (optcode) {
@@ -1483,6 +1487,15 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 			/* set limit # of found entries */
 			case 'l':
 					gLimitEntry = atoi((char *)optptr);
+					break;
+
+			/* set directory depth/level limit */
+			case 'L':
+					gLimitDirLevel = atoi((char *)optptr);
+					// implicit recursive
+					if (gLimitDirLevel > 1) {
+						gRecursive++;
+					}
 					break;
 
 			/* recursive mode */

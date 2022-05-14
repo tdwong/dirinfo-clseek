@@ -63,6 +63,8 @@ LIBS=	$(LIBtd)
 
 # ~~~
 
+default: clseek
+
 #
 # $@	: the target
 # $<	: the dependent
@@ -109,7 +111,7 @@ ARCHIVE=CLSeek-$(shell grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2).zi
 distribute tarball:
 	@echo "creating archive: $(ARCHIVE)..."
 #	@zip -qu CLSeek-`grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2`.zip $(ALL_SRCS) *.h *nmak* *.bat *.ico Makefile
-	@zip -qu $(ARCHIVE) $(ALL_SRCS) *.h *nmak* *.bat *.ico Makefile *.rc
+	@zip -qu $(ARCHIVE) $(ALL_SRCS) *.h *nmak* *.bat *.ico Makefile *.rc testdirs.zip
 
 VERSION := $(shell grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2)
 echo:

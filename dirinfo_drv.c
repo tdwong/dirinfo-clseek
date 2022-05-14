@@ -118,10 +118,16 @@ int showDirEntry(const char *filename, const char *dirname, struct stat *statp, 
 }
 
 // show program version & build time
+#if !defined(__NO_INLINE__)
 inline void showVersion(char *name)
 {
 	printf("%s (built at %s %s)\n", name, __DATE__, __TIME__);  
 }
+#else
+	// use #define if inline is not allowed
+#define	showVersion(name) \
+	printf("%s (built at %s %s)\n", (name), __DATE__, __TIME__);  
+#endif
 
 /* main program
  */

@@ -47,6 +47,7 @@ typedef unsigned int	boolean;
  * public definitions
  */
 	/* fdsoutput */
+#define	OUT_CRITIAL	1
 #define	OUT_WARN	3
 #define	OUT_INFO	5
 #define	OUT_NOISE	9

@@ -80,7 +80,8 @@ typedef struct matchCriteria {
 
 /* public functions
  */
-extern int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, int recursive);
+	///TODO: maxLevel > 1 implies recursive == 1
+extern int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, int recursive, int maxLevel, int curLevel);
 extern void dirinfo_Report(dirInfo_t *dip, char *name);
 extern int IsValidPath(const char *path);
 extern int IsDirectory(const char *path);
