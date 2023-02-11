@@ -53,6 +53,7 @@
 //   T. David Wong		06-21-2019    added -0 to terminate with NUL character
 //   T. David Wong		10-01-2020    added -y & -z to extend -x functionality
 //   T. David Wong		04-07-2022    added -L (limit directory level) option
+//   T. David Wong		02-10-2023    made return value consistent (rc>=0 = # of matches)
 //
 // TODO:
 //  1. utilize mystropt library for -c, -C, -x, -X options
@@ -63,7 +64,7 @@
 #define _COPYRIGHT_	"(c) 2003-2022 Tzunghsing David <wong>"
 #define _DESCRIPTION_	"Command-line seek utility"
 #define _PROGRAMNAME_	"CLSeek"	/* program name */
-#define _PROGRAMVERSION_	"1.5b"	/* program version */
+#define _PROGRAMVERSION_	"1.6a"	/* program version */
 #define	_ENVVARNAME_	"CLSEEKOPT"	/* environment variable name */
 
 #include <stdio.h>
@@ -147,6 +148,7 @@ static char gPathDelimiter =
 uint gEntityAttribute = (ENTITY_FILE | ENTITY_DIRECTORY | ENTITY_SYMLINK);
 uint gLimitEntry = 0;
 uint gLimitDirLevel = 0;
+uint gTotalMatches = 0;
 boolean      gJunkPaths = 0;
 boolean      gRecursive = 0;
 boolean      gQuietMode = 0;
@@ -401,7 +403,7 @@ main(int argc, char **argv)
 		/* and no environment setting */
 		if (envp == NULL) {
 			usage(progname, 0);
-			return 0;
+			return 0;	// gTotalMatches;
 		}
 		/* but environment setting available */
 		else {
@@ -497,7 +499,7 @@ main(int argc, char **argv)
 	if (gPathContainsStr) free(gPathContainsStr);
 	if (gPathExcludesStr) free(gPathExcludesStr);
 
-	return 0;
+	return gTotalMatches;
 }
 
 
@@ -646,14 +648,14 @@ static int matchNameString(const char *filename, const char *fullpath)
 
 	/* regular expression matching */
 	if (gFileRegExp) {
-  		if (re_search(&gFilePatternBuffer, filename, strlen(filename), 0, strlen(filename), NULL) >= 0) {
+		if (re_search(&gFilePatternBuffer, filename, strlen(filename), 0, strlen(filename), NULL) >= 0) {
 			if (gDebug > 2) fprintf(stderr, "*** %s matches File regex [%s]\n", fullpath, gFileRegExp);
 			match++;
 		}
 	}
 
 	if (gPathRegExp) {
-  		if (re_search(&gPathPatternBuffer, fullpath, strlen(fullpath), 0, strlen(fullpath), NULL) >= 0) {
+		if (re_search(&gPathPatternBuffer, fullpath, strlen(fullpath), 0, strlen(fullpath), NULL) >= 0) {
 			if (gDebug > 2) fprintf(stderr, "*** %s matches Path regex [%s]\n", fullpath, gPathRegExp);
 			match++;
 		}
@@ -957,6 +959,7 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 		}
 
 		/* information collection */
+		gTotalMatches++;
 		realMatchedCount++;
 		if (attr == ENTITY_DIRECTORY) { gMatchedBuffer.num_of_directories++; }
 		else if (attr == ENTITY_FILE) { gMatchedBuffer.num_of_files++; }
@@ -1472,6 +1475,7 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 						 *      -p-x  - execution permission not set
 						 *      -pr   - only read permission set
 						 */
+						//*	affects gPermissionState, gPermissionMode
 						if (parsePermissionConstraint(optcode, optptr) >= 0) {
 							/* set global variables */
 							gPermissionCriteria++;
