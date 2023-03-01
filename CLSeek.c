@@ -54,6 +54,7 @@
 //   T. David Wong		10-01-2020    added -y & -z to extend -x functionality
 //   T. David Wong		04-07-2022    added -L (limit directory level) option
 //   T. David Wong		02-10-2023    made return value consistent (rc>=0 = # of matches)
+//   T. David Wong		02-28-2023    added -V (verbose) for Unix-variant && code clean-up
 //
 // TODO:
 //  1. utilize mystropt library for -c, -C, -x, -X options
@@ -64,7 +65,7 @@
 #define _COPYRIGHT_	"(c) 2003-2022 Tzunghsing David <wong>"
 #define _DESCRIPTION_	"Command-line seek utility"
 #define _PROGRAMNAME_	"CLSeek"	/* program name */
-#define _PROGRAMVERSION_	"1.6a"	/* program version */
+#define _PROGRAMVERSION_	"1.7L"	/* program version */
 #define	_ENVVARNAME_	"CLSEEKOPT"	/* environment variable name */
 
 #include <stdio.h>
@@ -80,6 +81,7 @@
 #if	defined(unix) || defined(__STDC__)
 #include <dirent.h>
 #include <unistd.h>
+#include <sys/ioctl.h>	// ioctl for terminal window size
 #endif
 
 #include "mygetopt.h"
@@ -152,8 +154,10 @@ uint gTotalMatches = 0;
 boolean      gJunkPaths = 0;
 boolean      gRecursive = 0;
 boolean      gQuietMode = 0;
+boolean      gVerboseMode = 0;		// show entry is being examined
+struct winsize	gTerminalSize;
 boolean      gNulTerminator = 0;
-boolean      gIgnoreCase =      //* default is determined by OS type
+boolean      gIgnoreCase =			//* default is determined by OS type
 #ifdef	_MSC_VER
 			1;	// case insensitive
 #else
@@ -199,6 +203,7 @@ uint gFileNameLengthCriteria = 0;
 	int gNameLengthUpperLimit = 0;	/* when gNameLengthComparisonSetting == SIZE_IN_RANGE */
 	int gNameLengthLowerLimit = 0;	/* when gNameLengthComparisonSetting == SIZE_IN_RANGE */
 uint gPermissionCriteria = 0;
+char *gPermissionConstraintStr = NULL;
 #define	MODE_NOT_INCLUDE	0
 #define	MODE_TO_INCLUDE		1
 #define	MODE_TO_MATCH		2
@@ -224,7 +229,7 @@ static int check_IfDirectory(char *path);
 static int check_IfFile(char *path);
 */
 static int Str2ArgList(char *str, char **arlist, int arlistsize);
-static int parse_Parameter(char *progname, int argc, char **argv);
+static int32_t parse_Parameter(char *progname, int argc, char **argv);
 static int parseTimeConstraint(int option, char *str);
 static int parseSizeConstraint(int option, char *str);
 static int parseNameLengthConstraint(int option, char *str);
@@ -318,6 +323,9 @@ static void usage(char *progname, int detail)
 	fprintf(stdout, "  -I               enable case distinctions\n");
 	fprintf(stdout, "  -E<program>      execute program or command\n");
 	fprintf(stdout, "  -q               quiet mode\n");
+#if	defined(unix) || defined(__STDC__)
+	fprintf(stdout, "  -V               verbose mode (disabled in debug mode\n");
+#endif
 	fprintf(stdout, "  -0               use NUL instead of NL as terminator\n");
 	fprintf(stdout, "  -d#              debug level\n");
 	fprintf(stdout, "\n");
@@ -373,7 +381,7 @@ main(int argc, char **argv)
 {
 	char *progname = argv[0];
 	char *envp = getenv(_ENVVARNAME_);
-	int  nextarg;
+	int32_t nextarg;
 
 	/* process environment setting if exists */
 	if (envp != NULL) {
@@ -861,6 +869,22 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 	}
 
 	/* real match... */
+#if	defined(unix) || defined(__STDC__)
+#define CLEAR_LINE	"\33[2K"
+#define CURSOR_UP	"\033[A"
+	static uint32_t lastLineLen = 0;
+	if (gVerboseMode) {
+		// last line is wider than current terminal width
+		if (lastLineLen > gTerminalSize.ws_col) {
+			printf("%s%s", CLEAR_LINE, CURSOR_UP);
+		}
+		printf("%s\r%s\r", CLEAR_LINE, fullpath);
+//		printf("%s\r[%d:%d]-%s", CLEAR_LINE, gTerminalSize.ws_col, lastLineLen, fullpath);
+		fflush(stdout);
+        lastLineLen = (int)strlen(fullpath);
+	}
+#endif
+	#
 	if (
 		/* matching [path]name with patterns */
 		((gPathNameCriteria == 0) ||
@@ -905,6 +929,18 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 		{
 			/* echo matched entitiy */
 			if (gQuietMode == 0) {
+
+#if	defined(unix) || defined(__STDC__)
+	if (gVerboseMode) {
+		// last line is wider than current terminal width
+		if (lastLineLen > gTerminalSize.ws_col) {
+			printf("%s%s", CLEAR_LINE, CURSOR_UP);
+		}
+		printf("%s\r", CLEAR_LINE);
+		lastLineLen = 0;
+	}
+#endif
+
 				if (gJunkPaths) {
 					char *lastp = strrchr(fullpath, (int)gPathDelimiter);
 					printf("%s", (lastp == NULL) ? fullpath : ++lastp);
@@ -955,7 +991,7 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 // TODO: manage & print wide-characters
 //					wprintf(L"-คJนา-%s\n", fullpath);
 				}
-			}
+			}	/* if (gQuietMode == 0) */
 		}
 
 		/* information collection */
@@ -991,15 +1027,20 @@ static void	show_Setting(int optptr, int argc, char **argv)
 {
 	int optidx;
 	fprintf(stderr, "--- program settings ---\n");
-	fprintf(stderr, "attribute: %s %s\n",
+	fprintf(stderr, "attribute: %s %s %s\n",
 			(gEntityAttribute&ENTITY_DIRECTORY)?"DIRECTORY":"",
+#if	!defined(_WIN32) && !defined(__CYGWIN32__)
+			(gEntityAttribute&ENTITY_SYMLINK)?"SYMLINK":"",
+#endif	/* !_WIN32 && !__CYGWIN32__ */
 			(gEntityAttribute&ENTITY_FILE)?"FILE":"");
 	fprintf(stderr, "limit entries:        %d (0 = unlimited)\n", gLimitEntry);
 	fprintf(stderr, "ignore case:          %s\n", gIgnoreCase ? "TRUE" : "FALSE");
 	fprintf(stderr, "junk output path:     %s\n", gJunkPaths ? "TRUE" : "FALSE");
 	fprintf(stderr, "recursive mode:       %s\n", gRecursive ? "TRUE" : "FALSE");
-	fprintf(stderr, "limit directory level:%d (0 = unlimited)\n", gLimitDirLevel);
+	fprintf(stderr, "directory level:      %d (0 = unlimited)\n", gLimitDirLevel);
 	fprintf(stderr, "quiet mode:           %s\n", gQuietMode ? "TRUE" : "FALSE");
+	fprintf(stderr, "verbose mode:         %s\n", gVerboseMode ? "TRUE" : "FALSE");
+	fprintf(stderr, "nul terminator:       %s\n", gNulTerminator ? "TRUE" : "FALSE");
 	fprintf(stderr, "name equals with:     %s\n", gNameEquals ? gNameEquals : "");
 	fprintf(stderr, "name begins with:     %s\n", gNameBegins ? gNameBegins : "");
 	fprintf(stderr, "name ends with:       %s\n", gNameEnds ? gNameEnds : "");
@@ -1040,6 +1081,10 @@ static void	show_Setting(int optptr, int argc, char **argv)
 		else /* (gNameLengthComparisonSetting == SIZE_IN_RANGE) */
 	fprintf(stderr, "file name length must be between %d and %d bytes\n", gNameLengthLowerLimit, gNameLengthUpperLimit);
 	}
+	if (gPermissionCriteria) {
+	fprintf(stderr, "permission constraint: %s\n", gPermissionConstraintStr);
+	}
+	//
 	fprintf(stderr, "compound command: %s\n", gCompoundCommand ? gCompoundCommand : "[none]");
 	fprintf(stderr, "debug level set to: %d\n", gDebug);
 	fprintf(stderr, "target directory: %s\n", gTargetDirectory ? gTargetDirectory : "[none]");
@@ -1156,7 +1201,7 @@ static int Str2ArgList(char *str, char **arlist, int arlistsize)
 
 /* Parsing parameters in (argc, argv)
  */
-static int parse_Parameter(char *progname, int argc, char **argv)
+static int32_t parse_Parameter(char *progname, int argc, char **argv)
 {
 	int optcode;
 	char *optptr;
@@ -1177,7 +1222,7 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 	 */
 	optptr = NULL;
 	// while ((c = getopt(argc, argv, "abo:")) != EOF)
-	while ((optcode = fds_getopt(&optptr, "?hva:=:b:c:e:x:y:z:m:n:o:C:X:M:t:s:w:p:D:jl:L:rRiIE:q0d:", argc, argv)) != EOF)
+	while ((optcode = fds_getopt(&optptr, "?hva:=:b:c:e:x:y:z:m:n:o:C:X:M:t:s:w:p:D:jl:L:rRiIE:qV0d:", argc, argv)) != EOF)
 	{
 		//-dbg- printf("optcode=%c *optptr=%c\n", optcode, *optptr);
 		switch (optcode) {
@@ -1448,9 +1493,10 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 							break;
 						}
 						/* e.g.
-						 *      -l+12 - filename length longer than 12 bytes
-						 *      -s-10 - filename length shorter than 10 bytes
-						 *      -s8   - filename length is 8 bytes
+						 *      -w+12 - filename length longer than 12 bytes
+						 *      -w-10 - filename length shorter than 10 bytes
+						 *      -w=8  - filename length is 8 bytes
+						 *      -w8   - filename length is 8 bytes
 						 */
 						if (parseNameLengthConstraint(optcode, optptr) < 0) {
 							errflags++;
@@ -1479,6 +1525,7 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 						if (parsePermissionConstraint(optcode, optptr) >= 0) {
 							/* set global variables */
 							gPermissionCriteria++;
+							gPermissionConstraintStr = optptr;
 						}
 						break;
 					}
@@ -1511,6 +1558,19 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 
 			/* enable quiet mode */
 			case 'q':  gQuietMode++;	break;
+
+#if	defined(unix) || defined(__STDC__)
+			/* enable verbose mode
+			 * only valid if no debug message
+			 */
+			case 'V': 
+					if (gDebug == 0) { gVerboseMode++; }
+					else {
+						fprintf(stderr, "verbose mode disabled in debug mode\n");
+					}
+        			ioctl(STDOUT_FILENO, TIOCGWINSZ, &gTerminalSize);
+					break;
+#endif
 
 			/* enable NUL terminator */
 			case '0':  gNulTerminator++;	break;
@@ -1545,6 +1605,8 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 			/* set debug level */
 			case 'd':
 					gDebug = atoi((char *)optptr);
+					// debug mode disables verbose mode
+					if (gDebug) { gVerboseMode = 0; }
 					break;
 
 			/* special option - option starts with "--" */
@@ -1569,12 +1631,19 @@ static int parse_Parameter(char *progname, int argc, char **argv)
 	/*
 	 *** */
 
+	///NOTE: when fds_getopt() returns EOF, optptr is set to the INDEX of next argument
+	//
+	// e.g. -iraf -cname -Xnova- -V   target-dir
+	//      ^[1]  ^[2]   ^[3]    ^[4] ^[5]
+	//                                optptr is 5
+
 	/* error handling */
 	if (errflags) {
 		// version(progname);
 		return -1;
 	}
-	return (int) optptr;
+	//
+	return (int32_t) optptr;
 }
 
 static int timeInSeconds(char *str)
