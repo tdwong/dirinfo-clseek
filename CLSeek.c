@@ -65,7 +65,7 @@
 #define _COPYRIGHT_	"(c) 2003-2022 Tzunghsing David <wong>"
 #define _DESCRIPTION_	"Command-line seek utility"
 #define _PROGRAMNAME_	"CLSeek"	/* program name */
-#define _PROGRAMVERSION_	"1.7L"	/* program version */
+#define _PROGRAMVERSION_	"1.71c"	/* program version */
 #define	_ENVVARNAME_	"CLSEEKOPT"	/* environment variable name */
 
 #include <stdio.h>
@@ -82,6 +82,14 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <sys/ioctl.h>	// ioctl for terminal window size
+/*
+ * \033[J  - Erase Display: Clears the screen from the cursor to the end of the screen
+ * \033[2J - Erase Display: Clears the screen and moves the cursor to the home position (line 0, column 0)
+ * \033[K  - Erase Line: Clears all characters from the cursor position to the end of the line (including the character at the cursor position)
+ * \033[2K - Erase Line: Clears all characters on the line
+ */
+#define CLEAR_LINE	"\33[2K"
+#define CURSOR_UP	"\033[A"
 #endif
 
 #include "mygetopt.h"
@@ -155,6 +163,7 @@ boolean      gJunkPaths = 0;
 boolean      gRecursive = 0;
 boolean      gQuietMode = 0;
 boolean      gVerboseMode = 0;		// show entry is being examined
+static uint32_t gLastVerboseLen = 0;
 struct winsize	gTerminalSize;
 boolean      gNulTerminator = 0;
 boolean      gIgnoreCase =			//* default is determined by OS type
@@ -164,6 +173,7 @@ boolean      gIgnoreCase =			//* default is determined by OS type
 			0;	// case sensitive
 #endif	/* _MSC_VER */
 uint gDebug = 0;
+uint gShowSettings = 0;
 uint gPathNameCriteria = 0;
 	char *gNameEquals   = NULL;
 	char *gNameBegins   = NULL;
@@ -216,7 +226,7 @@ char *gTargetDirectory = NULL;
 
 /* local functions
  */
-static void	show_Setting(int optptr, int argc, char **argv);
+static void	show_Settings(int optptr, int argc, char **argv);
 static void check_Setting(void);
 static void traverse_DirTree(char *dirpath);
 static int matchNameString(const char *filename, const char *fullpath);
@@ -324,10 +334,14 @@ static void usage(char *progname, int detail)
 	fprintf(stdout, "  -E<program>      execute program or command\n");
 	fprintf(stdout, "  -q               quiet mode\n");
 #if	defined(unix) || defined(__STDC__)
-	fprintf(stdout, "  -V               verbose mode (disabled in debug mode\n");
+	fprintf(stdout, "  -V               verbose mode (disabled in debug mode or use NUL terminator\n");
 #endif
 	fprintf(stdout, "  -0               use NUL instead of NL as terminator\n");
 	fprintf(stdout, "  -d#              debug level\n");
+	if (detail)
+	{
+	fprintf(stdout, "  -S               show settings (all options) and exit\n");
+	}
 	fprintf(stdout, "\n");
 	fprintf(stdout, "  Option set in environment variable \"%s\" will be parsed first\n", _ENVVARNAME_);
 	if (detail)
@@ -383,6 +397,11 @@ main(int argc, char **argv)
 	char *envp = getenv(_ENVVARNAME_);
 	int32_t nextarg;
 
+#if	defined(unix) || defined(__STDC__)
+	// assume unchanged terminal size during the run
+	ioctl(STDOUT_FILENO, TIOCGWINSZ, &gTerminalSize);
+#endif
+
 	/* process environment setting if exists */
 	if (envp != NULL) {
 	#define	ENV_OPT_COUNT	16
@@ -425,7 +444,7 @@ main(int argc, char **argv)
 #endif	/* _MSC_VER */
 
 	/* setting information */
-	if (gDebug >= 10) { show_Setting((int)0, 0, NULL); }
+	if (gDebug >= 10) { show_Settings((int)0, 0, NULL); }
 
 	/* parse arguments in command line
 	 */
@@ -437,9 +456,15 @@ main(int argc, char **argv)
 	//-dbg- printf("argc=%d nextarg=%d argv[nextarg]=<%s>\n", argc, nextarg, argv[nextarg]);
 
 	/* setting information */
-	if (gDebug >= 10) { show_Setting((int)nextarg, argc, argv); }
+	if (gDebug >= 10) { show_Settings((int)nextarg, argc, argv); }
 	/*
 	 *** */
+
+	//
+	if (gShowSettings) {
+		show_Settings((int)nextarg, argc, argv);
+		return 0;
+	}
 
 	/* ***
 	 * CHECK THE SETTING
@@ -499,6 +524,17 @@ main(int argc, char **argv)
 	}
 	/*
 	 *** */
+
+#if	defined(unix) || defined(__STDC__)
+	// clean up
+	if (gLastVerboseLen) {
+		if (gLastVerboseLen > gTerminalSize.ws_col) {
+			printf("%s%s", CLEAR_LINE, CURSOR_UP);
+		}
+		printf("%s\r", CLEAR_LINE);
+		fflush(stdout);
+	}
+#endif /* defined(unix) || defined(__STDC__) */
 
 	/* clean up allocated tables
 	 */
@@ -870,21 +906,15 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 
 	/* real match... */
 #if	defined(unix) || defined(__STDC__)
-#define CLEAR_LINE	"\33[2K"
-#define CURSOR_UP	"\033[A"
-	static uint32_t lastLineLen = 0;
 	if (gVerboseMode) {
-		// last line is wider than current terminal width
-		if (lastLineLen > gTerminalSize.ws_col) {
+		if (gLastVerboseLen && (gLastVerboseLen > gTerminalSize.ws_col))
+		{
 			printf("%s%s", CLEAR_LINE, CURSOR_UP);
 		}
-		printf("%s\r%s\r", CLEAR_LINE, fullpath);
-//		printf("%s\r[%d:%d]-%s", CLEAR_LINE, gTerminalSize.ws_col, lastLineLen, fullpath);
-		fflush(stdout);
-        lastLineLen = (int)strlen(fullpath);
+		printf("%s\r", CLEAR_LINE);
 	}
 #endif
-	#
+
 	if (
 		/* matching [path]name with patterns */
 		((gPathNameCriteria == 0) ||
@@ -900,7 +930,7 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 		(gPermissionCriteria && matchPermission(filename, fullpath, statp)))
 	)
 	{
-
+		// execute command on the matched entitiy
 		if (gCompoundCommand)
 		{
 			int  rc;
@@ -929,17 +959,6 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 		{
 			/* echo matched entitiy */
 			if (gQuietMode == 0) {
-
-#if	defined(unix) || defined(__STDC__)
-	if (gVerboseMode) {
-		// last line is wider than current terminal width
-		if (lastLineLen > gTerminalSize.ws_col) {
-			printf("%s%s", CLEAR_LINE, CURSOR_UP);
-		}
-		printf("%s\r", CLEAR_LINE);
-		lastLineLen = 0;
-	}
-#endif
 
 				if (gJunkPaths) {
 					char *lastp = strrchr(fullpath, (int)gPathDelimiter);
@@ -985,8 +1004,10 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 						}
 					}
 					else {
+						//printf("[=%03d]%s\n", (uint32_t)strlen(fullpath),fullpath);
 						printf("%s", fullpath);
 						putc(gNulTerminator ? (int)'\0' : (int)'\n', stdout);
+						fflush(stdout);
 					}
 // TODO: manage & print wide-characters
 //					wprintf(L"-คJนา-%s\n", fullpath);
@@ -994,9 +1015,19 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 			}	/* if (gQuietMode == 0) */
 		}
 
+#if	defined(unix) || defined(__STDC__)
+	if (gVerboseMode) {
+		// print verbose line
+		printf("%s\r%s", CLEAR_LINE, fullpath);
+		fflush(stdout);
+		gLastVerboseLen = (uint32_t)strlen(fullpath);
+	}
+#endif
+
 		/* information collection */
 		gTotalMatches++;
 		realMatchedCount++;
+
 		if (attr == ENTITY_DIRECTORY) { gMatchedBuffer.num_of_directories++; }
 		else if (attr == ENTITY_FILE) { gMatchedBuffer.num_of_files++; }
 		else                          { gMatchedBuffer.num_of_others++; }
@@ -1023,16 +1054,16 @@ static void dumpStrings(char *msg, char **array, int count)
 	return;
 }
 
-static void	show_Setting(int optptr, int argc, char **argv)
+static void	show_Settings(int optptr, int argc, char **argv)
 {
 	int optidx;
 	fprintf(stderr, "--- program settings ---\n");
-	fprintf(stderr, "attribute: %s %s %s\n",
-			(gEntityAttribute&ENTITY_DIRECTORY)?"DIRECTORY":"",
+	fprintf(stderr, "attribute:            %s%s%s\n",
+			(gEntityAttribute&ENTITY_DIRECTORY)?"DIRECTORY ":"",
 #if	!defined(_WIN32) && !defined(__CYGWIN32__)
-			(gEntityAttribute&ENTITY_SYMLINK)?"SYMLINK":"",
+			(gEntityAttribute&ENTITY_SYMLINK)?"SYMLINK ":"",
 #endif	/* !_WIN32 && !__CYGWIN32__ */
-			(gEntityAttribute&ENTITY_FILE)?"FILE":"");
+			(gEntityAttribute&ENTITY_FILE)?"FILE ":"");
 	fprintf(stderr, "limit entries:        %d (0 = unlimited)\n", gLimitEntry);
 	fprintf(stderr, "ignore case:          %s\n", gIgnoreCase ? "TRUE" : "FALSE");
 	fprintf(stderr, "junk output path:     %s\n", gJunkPaths ? "TRUE" : "FALSE");
@@ -1085,15 +1116,19 @@ static void	show_Setting(int optptr, int argc, char **argv)
 	fprintf(stderr, "permission constraint: %s\n", gPermissionConstraintStr);
 	}
 	//
-	fprintf(stderr, "compound command: %s\n", gCompoundCommand ? gCompoundCommand : "[none]");
-	fprintf(stderr, "debug level set to: %d\n", gDebug);
-	fprintf(stderr, "target directory: %s\n", gTargetDirectory ? gTargetDirectory : "[none]");
-
+	fprintf(stderr, "compound command:     %s\n", gCompoundCommand ? gCompoundCommand : "[none]");
+	fprintf(stderr, "debug level set to:   %d\n", gDebug);
+	fprintf(stderr, "target directory:     %s\n", gTargetDirectory ? gTargetDirectory : "[none]");
+	//
 	/* rest of arguments */
-	fprintf(stderr, "directories to be visited:\n");
+	fprintf(stderr, "directories to visit:\n");
 	for (optidx = (int)optptr; optidx < argc; optidx++) {
-		fprintf(stderr, "argv[%d] = %s\n", optidx, argv[optidx]);
+		fprintf(stderr, "  argv[%d] = %s\n", optidx, argv[optidx]);
 	}
+	//
+	fprintf(stderr, "terminal dimention:   lines: %d columns: %d\n",
+		gTerminalSize.ws_row, gTerminalSize.ws_col);
+
 	fprintf(stderr, "--- end of settings ---\n\n");
 
 	return;
@@ -1222,7 +1257,7 @@ static int32_t parse_Parameter(char *progname, int argc, char **argv)
 	 */
 	optptr = NULL;
 	// while ((c = getopt(argc, argv, "abo:")) != EOF)
-	while ((optcode = fds_getopt(&optptr, "?hva:=:b:c:e:x:y:z:m:n:o:C:X:M:t:s:w:p:D:jl:L:rRiIE:qV0d:", argc, argv)) != EOF)
+	while ((optcode = fds_getopt(&optptr, "?hva:=:b:c:e:x:y:z:m:n:o:C:X:M:t:s:w:p:D:jl:L:rRiIE:qV0d:S", argc, argv)) != EOF)
 	{
 		//-dbg- printf("optcode=%c *optptr=%c\n", optcode, *optptr);
 		switch (optcode) {
@@ -1564,16 +1599,19 @@ static int32_t parse_Parameter(char *progname, int argc, char **argv)
 			 * only valid if no debug message
 			 */
 			case 'V': 
-					if (gDebug == 0) { gVerboseMode++; }
+					if (gDebug == 0 && gNulTerminator == 0) { gVerboseMode++; }
 					else {
-						fprintf(stderr, "verbose mode disabled in debug mode\n");
+						fprintf(stderr, "verbose mode disabled in debug mode or use NUL terminator\n");
 					}
-        			ioctl(STDOUT_FILENO, TIOCGWINSZ, &gTerminalSize);
 					break;
 #endif
 
 			/* enable NUL terminator */
-			case '0':  gNulTerminator++;	break;
+			case '0':
+					gNulTerminator++;
+					// using NUL terminator disables verbose mode
+					if (gNulTerminator) { gVerboseMode = 0; }
+					break;
 
 			/* set up external program */
 			case 'E':
@@ -1607,6 +1645,11 @@ static int32_t parse_Parameter(char *progname, int argc, char **argv)
 					gDebug = atoi((char *)optptr);
 					// debug mode disables verbose mode
 					if (gDebug) { gVerboseMode = 0; }
+					break;
+
+			/* show settings only */
+			case 'S':
+					gShowSettings++;
 					break;
 
 			/* special option - option starts with "--" */
