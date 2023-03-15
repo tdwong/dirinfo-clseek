@@ -62,10 +62,10 @@
 //	3. enable ORing given options
 //
 
-#define _COPYRIGHT_	"(c) 2003-2022 Tzunghsing David <wong>"
+#define _COPYRIGHT_	"(c) 2003-2023 Tzunghsing David <wong>"
 #define _DESCRIPTION_	"Command-line seek utility"
 #define _PROGRAMNAME_	"CLSeek"	/* program name */
-#define _PROGRAMVERSION_	"1.71c"	/* program version */
+#define _PROGRAMVERSION_	"1.71g"	/* program version */
 #define	_ENVVARNAME_	"CLSEEKOPT"	/* environment variable name */
 
 #include <stdio.h>
@@ -528,7 +528,8 @@ main(int argc, char **argv)
 #if	defined(unix) || defined(__STDC__)
 	// clean up
 	if (gLastVerboseLen) {
-		if (gLastVerboseLen > gTerminalSize.ws_col) {
+		uint32_t fLines = (gLastVerboseLen / gTerminalSize.ws_col);
+		while (fLines--) {
 			printf("%s%s", CLEAR_LINE, CURSOR_UP);
 		}
 		printf("%s\r", CLEAR_LINE);
@@ -909,9 +910,11 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 	if (gVerboseMode) {
 		if (gLastVerboseLen && (gLastVerboseLen > gTerminalSize.ws_col))
 		{
-			printf("%s%s", CLEAR_LINE, CURSOR_UP);
+            uint32_t fLines = (gLastVerboseLen / gTerminalSize.ws_col);
+            while (fLines--) {
+                printf("%s%s", CLEAR_LINE, CURSOR_UP);
+		    }
 		}
-		printf("%s\r", CLEAR_LINE);
 	}
 #endif
 
@@ -1015,15 +1018,6 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 			}	/* if (gQuietMode == 0) */
 		}
 
-#if	defined(unix) || defined(__STDC__)
-	if (gVerboseMode) {
-		// print verbose line
-		printf("%s\r%s", CLEAR_LINE, fullpath);
-		fflush(stdout);
-		gLastVerboseLen = (uint32_t)strlen(fullpath);
-	}
-#endif
-
 		/* information collection */
 		gTotalMatches++;
 		realMatchedCount++;
@@ -1036,6 +1030,15 @@ int seekCallback(const char *filename, const char *fullpath, struct stat *statp,
 		if (gLimitEntry == realMatchedCount)
 			exit (gLimitEntry);
 	}
+
+#if	defined(unix) || defined(__STDC__)
+	if (gVerboseMode) {
+		// print verbose line
+		printf("%s\r%s", CLEAR_LINE, fullpath);
+		fflush(stdout);
+		gLastVerboseLen = (uint32_t)strlen(fullpath);
+	}
+#endif
 
 	return 0;
 }
