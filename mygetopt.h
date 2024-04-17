@@ -52,6 +52,7 @@ typedef unsigned int	boolean;
 #define	OUT_INFO	5
 #define	OUT_NOISE	9
 	/* fds_getopt */
+#define	OPT_NONOPT		'\002'
 #define	OPT_UNKNOWN		'\003'
 #define	OPT_SPECIAL		':'
 

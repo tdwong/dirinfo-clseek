@@ -10,26 +10,28 @@
 
 # ~~~
 
+# Ubuntu 16.04 gcc (Ubuntu 5.4.0-6ubuntu1~16.04.12) 5.4.0 20160609
+GCC_CFLAGS= -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
 USR_CFLAGS= -DSTDC_HEADERS=1 -DHAVE_STRING_H=1
-CFLAGS	= -g $(USR_CFLAGS)
+CFLAGS    = -g $(USR_CFLAGS) $(GCC_CFLAGS)
 
 # ~~~
 
 SRC_DIRINFO	=	\
-	mygetopt.c	\
+	mygetoptV2.c	\
 	dirinfo_drv.c	\
 	dirinfo.c
 #	finddir.c
 SRC_WHICH	=	\
 	which.c		\
-	mygetopt.c	\
+	mygetoptV2.c	\
 	dirinfo.c
 SRC_ISEMPTY	=	\
 	isempty.c	\
-	mygetopt.c	\
+	mygetoptV2.c	\
 	dirinfo.c
 SRC_LIBTD	=	\
-	mygetopt.c	\
+	mygetoptV2.c	\
 	mystropt.c	\
 	regex.c		\
 	dirinfo.c
@@ -93,6 +95,10 @@ clseek:	$(OBJ_CLSEEK) $(LIBtd)
 	$(CC) $(CFLAGS) -o $@ $^
 
 # ~~~
+mygetopt: mygetoptV2.c mygetopt.h
+	$(CC) -g -o $@ -D_TESTDRIVER_ $(GCC_CFLAGS) mygetoptV2.c
+
+# ~~~
 .PHONY: clean clean-all distclean
 clean:
 	$(RM) -v $(OBJS)
@@ -107,11 +113,18 @@ clean-all distclean:	clean
 #ARCHIVE=CLSeek-$(VERSION).zip
 ARCHIVE=CLSeek-$(shell grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2).zip
 
-.PHONY: distribute tarball echo
+.PHONY: distribute tarball echo help
 distribute tarball:
 	@echo "creating archive: $(ARCHIVE)..."
 #	@zip -qu CLSeek-`grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2`.zip $(ALL_SRCS) *.h *nmak* *.bat *.ico Makefile
 	@zip -qur $(ARCHIVE) $(ALL_SRCS) *.h *nmak* *.bat *.ico Makefile *.rc testdirs.zip testdirs.tgz msvc .clang-format
+
+help:
+	@echo "	make clseek"
+	@echo "	make isempty"
+	@echo "	make which"
+	@echo "	make dirinfo"
+	@echo "	make distribute | tarball"
 
 VERSION := $(shell grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2)
 echo:
@@ -121,7 +134,7 @@ echo:
 # ~~~
 
 # dependency
-mygetopt.o:	mygetopt.c mygetopt.h
+mygetoptV2.o:	mygetoptV2.c mygetopt.h
 mystropt.o:	mystropt.c mystropt.h
 regex.o:	regex.c
 dirinfo.o:	dirinfo.c dirinfo.h mygetopt.h
