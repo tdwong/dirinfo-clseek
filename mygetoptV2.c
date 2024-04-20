@@ -240,6 +240,12 @@ int main (int argc, char **argv)
 	}
 #endif	/* _debug_ */
 
+    //
+    /*-----NONOPT-----*/
+	// nonopts is an array of pointers (similar to *argv[]
+	char **nonopts = (char**) calloc(argc, sizeof(char*));
+	unsigned int nonoptix = 0;
+
 	// while ((c = getopt(argc, argv, "abo:")) != EOF)
 	while ((optcode = fds_getopt(&optptr, "hvkoi:p:d:r:u", argc, argv)) != EOF)
 	{
@@ -283,6 +289,7 @@ int main (int argc, char **argv)
 					break;
 			case OPT_NONOPT:
 					printf("non-opt -- not an option, but an argument: %s\n", optptr);
+			        nonopts[nonoptix++] = (char *)optptr;
 					break;
 			default:
 					printf("unimplemented option: %c\n", (char)optcode);
@@ -290,6 +297,13 @@ int main (int argc, char **argv)
 					break;
 		}
 	}	/* end-of-while */
+
+    /*-----NONOPT-----*/
+	// print only valid *nonopts[] entries
+	for (int ix=0; nonopts[ix]; ix++) {
+		fprintf(stdout, "[%p] nonopts[%d]=%s\n", &nonopts[ix], ix, nonopts[ix]);
+	}
+    free(nonopts);
 
 	/* any more arguments? */
 	if ((int)optptr >= argc) return 0;

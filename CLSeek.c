@@ -58,7 +58,8 @@
 //   T. David Wong		03-15-2023    (v1.71g)
 //                                    WIP: attempt to manipulate output line position on the screen
 //   T. David Wong		12-05-2023    (v1.8c)
-//   T. David Wong		04-15-2023    (v1.9) merged v1.71g back to mainline with #ifdef/#endif
+//   T. David Wong		04-15-2024    (v1.9) merged v1.71g back to mainline with #ifdef/#endif
+//   T. David Wong		04-10-2024    (v1.10) enabled mix of options and target directories
 //
 // TODO:
 //  1. utilize mystropt library for -c, -C, -x, -X options
@@ -66,10 +67,10 @@
 //	3. enable ORing given options
 //
 
-#define _COPYRIGHT_	"(c) 2003-2023 Tzunghsing David <wong>"
+#define _COPYRIGHT_	"(c) 2003-2024 Tzunghsing David <wong>"
 #define _DESCRIPTION_	"Command-line seek utility"
 #define _PROGRAMNAME_	"CLSeek"	/* program name */
-#define _PROGRAMVERSION_	"1.9d"	/* program version */
+#define _PROGRAMVERSION_	"1.10b"	/* program version */
 #define	_ENVVARNAME_	"CLSEEKOPT"	/* environment variable name */
 
 #include <stdio.h>
@@ -77,6 +78,7 @@
 #include <wchar.h>
 #endif	/* _MSC_VER */
 #include <string.h>
+#include <stdlib.h>		// calloc
 #include <stdint.h>		// uint32_t
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -182,7 +184,7 @@ boolean      gIgnoreCase =			//* default is determined by OS type
 #endif	/* _MSC_VER */
 uint gDebug = 0;
 uint gShowSettings = 0;
-uint gPathNameCriteria = 0;
+uint gPathNameCriteria = 0;         /* indicates any constraint on pathname or filename */
 	char *gNameEquals   = NULL;
 	char *gNameBegins   = NULL;
 	char **gNameContainsStr = NULL;
@@ -231,6 +233,8 @@ char *gCompoundCommand = NULL;
 	char gCompoundSymbol = '%';		/* replacable symbol in compound command */
 	int  gCompoundSymCount = 0;
 char *gTargetDirectory = NULL;
+char **gNonOptTargets  = NULL;		/* list of all directories to search */
+    uint gNonOptTargetCnt  = 0;
 
 /* local functions
  */
@@ -247,7 +251,7 @@ static int check_IfDirectory(char *path);
 static int check_IfFile(char *path);
 */
 static int Str2ArgList(char *str, char **arlist, int arlistsize);
-static int32_t parse_Parameter(char *progname, int argc, char **argv);
+static int32_t parse_Parameters(char *progname, int argc, char **argv);
 static int parseTimeConstraint(int option, char *str);
 static int parseSizeConstraint(int option, char *str);
 static int parseNameLengthConstraint(int option, char *str);
@@ -406,6 +410,10 @@ main(int argc, char **argv)
 	char *envp = getenv(_ENVVARNAME_);
 	int32_t nextarg;
 
+    /*-----NONOPT-----*/
+	// nonopts is an array of pointers (similar to *argv[]
+	gNonOptTargets = (char**) calloc(argc, sizeof(char*));
+
 #ifdef  __1_71g__
 #if	defined(unix) || defined(__STDC__)
 	// assume unchanged terminal size during the run
@@ -422,13 +430,13 @@ main(int argc, char **argv)
 		//-dbg- fprintf(stderr, "envp:>>%s<<\n", envp);
 				/** TODO: strdup() will introduce a memory leak **/
 		if ((eargc = Str2ArgList(strdup(envp), &eargv[1], ENV_OPT_COUNT))) {
-			/* create a dummy argv[0] as fds_getopt() in parse_Parameter()
+			/* create a dummy argv[0] as fds_getopt() in parse_Parameters()
 			 * SKIP the first argument...
 			 */
 			eargc++;
 			eargv[0] = _ENVVARNAME_;
 			/* evaluate all options */
-			parse_Parameter(progname, eargc, eargv);
+			parse_Parameters(progname, eargc, eargv);
 		}
 		else {
 			fprintf(stderr, "%s: environment variable contains NO valid options\n", _ENVVARNAME_);
@@ -459,7 +467,7 @@ main(int argc, char **argv)
 
 	/* parse arguments in command line
 	 */
-	nextarg = parse_Parameter(progname, argc, argv);
+	nextarg = parse_Parameters(progname, argc, argv);
 	if (nextarg <= 0) {
 		// version(progname);
 		return -1;
@@ -493,6 +501,8 @@ main(int argc, char **argv)
 	 *
 	 * If name constraint is set and the one and only one argument is a FILE,
 	 * then search this FILE at current direectory tree.
+     *
+     * e.g.  $ clseek -t-20m CLSeek.c
 	 */
 	if ((gPathNameCriteria == 0) &&
 		((argc - nextarg) == 1) && (IsFile(argv[nextarg]))
@@ -504,6 +514,14 @@ main(int argc, char **argv)
 		return 0;
 	}
 
+    /*-----NONOPT-----*/
+	if (gDebug) {
+		// list only valid *nonopts[] entries
+		for (int ix=0; gNonOptTargets[ix]; ix++) {
+			fprintf(stdout, "[%p] gNonOptTargets[%d]=%s\n", &gNonOptTargets[ix], ix, gNonOptTargets[ix]);
+		}
+	}
+
 	/* normal case:
 	 */
 	if (gTargetDirectory) {
@@ -513,7 +531,24 @@ main(int argc, char **argv)
 			traverse_DirTree(gTargetDirectory);
 		}
 	}
-	else if (nextarg < argc) {
+	else if ((nextarg < argc) || gNonOptTargetCnt) {
+		//
+		if (gNonOptTargetCnt) {
+			/*-----NONOPT-----*/
+			/* visit every target mixed within options */
+			for (int ix=0; gNonOptTargets[ix]; ix++) {
+				/* make sure this is a valid directory entry */
+				if (IsDirectory(gNonOptTargets[ix])) {
+					if (gDebug)
+						fprintf(stderr, "[%s]: IsDirectory\n", gNonOptTargets[ix]);
+					traverse_DirTree(gNonOptTargets[ix]);
+				}
+				else {
+					if (gDebug)
+						fprintf(stderr, "[%s]: IsNotDirectory\n", gNonOptTargets[ix]);
+				}
+			}
+		}
 		/* visit every remained parameter as root working directory
 		 */
 		int optidx;
@@ -538,6 +573,10 @@ main(int argc, char **argv)
 	/*
 	 *** */
 
+	/*
+	 * clean up
+	 */
+
 #ifdef  __1_71g__
 #if	defined(unix) || defined(__STDC__)
 	// clean up
@@ -558,6 +597,7 @@ main(int argc, char **argv)
 	if (gNameExcludesStr) free(gNameExcludesStr);
 	if (gPathContainsStr) free(gPathContainsStr);
 	if (gPathExcludesStr) free(gPathExcludesStr);
+	if (gNonOptTargets)   free(gNonOptTargets);
 
 	return gTotalMatches;
 }
@@ -1289,7 +1329,7 @@ static int Str2ArgList(char *str, char **arlist, int arlistsize)
 
 /* Parsing parameters in (argc, argv)
  */
-static int32_t parse_Parameter(char *progname, int argc, char **argv)
+static int32_t parse_Parameters(char *progname, int argc, char **argv)
 {
 	int optcode;
 	char *optptr;
@@ -1297,10 +1337,18 @@ static int32_t parse_Parameter(char *progname, int argc, char **argv)
 //	extern int optind;
 	int errflags = 0;
 
+//https://stackoverflow.com/a/15305354/663485
+#if	defined(_WIN32)
+    #define __FUNCNAME__    __FUNCTION__
+#elif	defined(__CYGWIN32__)
+    #define __FUNCNAME__    __func__
+#else   // *NIX
+    #define __FUNCNAME__    __func__
+#endif
 	if (gDebug > 10)
 	{
 		int ix;
-		printf("parse_Parameter\n");
+		printf("%s\n",__FUNCNAME__);
 		for (ix = 0; ix < argc; ix++)
 			printf("argv[%d] = %s\n", ix, argv[ix]);
 	}
@@ -1712,9 +1760,13 @@ static int32_t parse_Parameter(char *progname, int argc, char **argv)
 
 			/* set debug level */
 			case 'd':
-					gDebug = atoi((char *)optptr);
+                    {
+                    int dValue = atoi((char *)optptr);
+                    if (dValue == 0) { gDebug++; }
+                    else { gDebug = dValue; }
 					// debug mode disables verbose mode
 					if (gDebug) { gVerboseMode = 0; }
+                    }
 					break;
 
 			/* show settings only */
@@ -1730,6 +1782,14 @@ static int32_t parse_Parameter(char *progname, int argc, char **argv)
 					else if (strcmp(optptr, "version") == 0) version(progname);
 					else fprintf(stderr, "Unknown option: --%s\n", optptr);
 					return 0;
+
+			/* non-option argument that is mixed within options */
+			case OPT_NONOPT:
+					if (gDebug) {
+						fprintf(stderr, "OPT_NONOPT -- not an option, but an argument: %s\n", optptr);
+					}
+			        gNonOptTargets[gNonOptTargetCnt++] = (char *)optptr;
+					break;
 
 			case OPT_UNKNOWN:
 					fprintf(stderr, "Unknown option: %s\n", optptr);
