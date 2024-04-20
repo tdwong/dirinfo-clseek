@@ -64,6 +64,10 @@ OBJS=	\
 LIBS=	$(LIBtd)
 
 # ~~~
+CLANG_FORMAT=.clang-format
+GIT_RELATED=.git/config _set_git_commit_dates.sh
+
+# ~~~
 
 default: clseek
 
@@ -117,7 +121,8 @@ ARCHIVE=CLSeek-$(shell grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2).zi
 distribute tarball:
 	@echo "creating archive: $(ARCHIVE)..."
 #	@zip -qu CLSeek-`grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2`.zip $(ALL_SRCS) *.h *nmak* *.bat *.ico Makefile
-	@zip -qur $(ARCHIVE) $(ALL_SRCS) *.h *nmak* *.bat *.ico Makefile *.rc testdirs.zip testdirs.tgz msvc .clang-format
+	@zip -qur $(ARCHIVE) $(ALL_SRCS) *.h *nmak* *.bat *.ico Makefile *.rc testdirs.zip testdirs.tgz msvc \
+		$(CLANG_FORMAT) $(GIT_RELATED)
 
 help:
 	@echo "	make clseek"
@@ -129,7 +134,10 @@ help:
 VERSION := $(shell grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2)
 echo:
 	@echo VERSION=$(VERSION)
-	@echo -n "VER="; grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2
+	@echo VER= $(shell grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2)
+	@echo \
+		clang=$(CLANG_FORMAT) \
+		git=$(GIT_RELATED)
 
 # ~~~
 
