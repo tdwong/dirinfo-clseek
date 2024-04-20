@@ -133,5 +133,5 @@ dummy:
 #
 CLSeek.c:	dirinfo.h
 dirinfo.c:	dirinfo.h mygetopt.h
-mygetopt.c:	mygetopt.h
+mygetoptV2.c:	mygetopt.h
 

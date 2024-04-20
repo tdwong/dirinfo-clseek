@@ -20,7 +20,7 @@ USR_LIBS=
 # these MUST be properly defined!!!
 #
 OBJS=\
-	$(INTDIR)\mygetopt.obj	\
+	$(INTDIR)\mygetoptV2.obj	\
 	$(INTDIR)\mystropt.obj	\
 	$(INTDIR)\regex.obj	\
 	$(INTDIR)\dirinfo.obj
