@@ -11,7 +11,13 @@
 # ~~~
 
 # Ubuntu 16.04 gcc (Ubuntu 5.4.0-6ubuntu1~16.04.12) 5.4.0 20160609
+ifeq ($(shell uname -s),Linux)
 GCC_CFLAGS= -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
+else
+ifeq ($(shell uname -s),Darwin)
+GCC_CFLAGS= -Wno-deprecated-non-prototype -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast
+endif
+endif
 USR_CFLAGS= -DSTDC_HEADERS=1 -DHAVE_STRING_H=1
 CFLAGS    = -g $(USR_CFLAGS) $(GCC_CFLAGS)
 
@@ -117,7 +123,7 @@ clean-all distclean:	clean
 #ARCHIVE=CLSeek-$(VERSION).zip
 ARCHIVE=CLSeek-$(shell grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2).zip
 
-.PHONY: distribute tarball echo help
+.PHONY: distribute tarball echo help rsync rsync-n
 distribute tarball:
 	@echo "creating archive: $(ARCHIVE)..."
 #	@zip -qu CLSeek-`grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2`.zip $(ALL_SRCS) *.h *nmak* *.bat *.ico Makefile
@@ -135,9 +141,32 @@ VERSION := $(shell grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2)
 echo:
 	@echo VERSION=$(VERSION)
 	@echo VER= $(shell grep "define.*PROGRAMVERSION" CLSeek.c | cut -d\" -f2)
+	@echo GCC_CFLAGS=$(GCC_CFLAGS)
 	@echo \
 		clang=$(CLANG_FORMAT) \
 		git=$(GIT_RELATED)
+	@echo REMOTE_DIR=$(REMOTE_DIR)
+	@echo RSYNC_OPTS=$(RSYNC_OPTS)
+	@echo RSYNC_EXCLUDES=$(RSYNC_EXCLUDES)
+
+
+#
+## 2024-0426 rsync-n and rsync targets are valid ONLY at mlla11400
+#
+ifeq ($(shell hostname | tr '[A-Z]' '[a-z]'),mlla11400)
+REMOTE_DIR=twong@ubuntu:~/Workspace/c_c++/c/dirinfo
+RSYNC_OPTS=-auv --perms -W --progress
+RSYNC_EXCLUDES=--exclude '*~' --exclude '*.[oa]' --exclude '.*.sw?' --exclude=.git --exclude=clseek
+# rsync to remote host
+rsync-n:
+	@rsync $(RSYNC_OPTS) $(RSYNC_EXCLUDES) ./ $(REMOTE_DIR)/ -n
+
+rsync:
+	@rsync $(RSYNC_OPTS) $(RSYNC_EXCLUDES) ./ $(REMOTE_DIR)/
+endif	# hostname = mlla11400
+
+>>>>>>> af346b7 (v1.10b - update Makefile)
+>>>>>>> 6208f23 (v1.10b - update Makefile)
 
 # ~~~
 
