@@ -165,9 +165,6 @@ rsync:
 	@rsync $(RSYNC_OPTS) $(RSYNC_EXCLUDES) ./ $(REMOTE_DIR)/
 endif	# hostname = mlla11400
 
->>>>>>> af346b7 (v1.10b - update Makefile)
->>>>>>> 6208f23 (v1.10b - update Makefile)
-
 # ~~~
 
 # dependency
