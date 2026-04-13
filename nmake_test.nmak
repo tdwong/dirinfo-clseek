@@ -1,5 +1,26 @@
 #
+
+TARGET=nmake_test
+
+!IF EXISTS("nmake.setup")
+!INCLUDE "nmake.setup"
+!ELSEIF EXIST("..\..\make\nmake.setup")
+!INCLUDE "..\..\make\nmake.setup"
+##!ELSE
+##!ERROR Warning: cannot find "nmake.setup"
+!ENDIF
+
+#
+default: all
 all:
 	@echo _NMAKE_VER=$(_NMAKE_VER)
 	@echo _MSC_VER=$(_MSC_VER)
+	@echo ...
+	@echo VS2019_Supp_Libs=$(VS2019_Supp_Libs)
+	@echo COMMON_LIBS=$(COMMON_LIBS)
+	@echo ...
+	@echo COMMON_CFLAGS=$(COMMON_CFLAGS)
+	@echo COMMON_LDFLAGS=$(COMMON_LDFLAGS)
+	@echo COMMON_LIBFLAGS=$(COMMON_LIBFLAGS)
+	@echo COMMON_DLLFLAGS=$(COMMON_DLLFLAGS)
 

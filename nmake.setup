@@ -257,7 +257,6 @@ Minimum_Common_Libs= \
 VS2019_Supp_Libs=vcruntimed.lib ucrtd.lib
 !ENDIF
 COMMON_LIBS= $(Complete_Common_Libs) \
-	vcruntimed.lib ucrtd.lib \
 	$(VS2019_Supp_Libs)
 #
 	#: /pdb was [ /pdb:"$(OUTDIR)\$(TARGET).pdb" ] in $(COMMON_LDFLAGS) 
