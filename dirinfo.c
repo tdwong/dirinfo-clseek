@@ -50,6 +50,14 @@
  * - Callback function will be called if provided in matchCriteria structure.
  * - Collected statistics will be recorded in dirInfo structure.
  * - Depends on the recursive flag, this function could recursively calls itself.
+ *
+dirinfo_Find(
+	const char      *dirname,		// directory name
+	dirInfo_t       *dip,			// directory info block
+	matchCriteria_t *mcbuf,			// matching criteria
+	int              recursive,		// recursive flag
+	int              maxLevel,		// max recursive level	// 0 - unlimited
+	int              curLevel)		// current recursive level
  */
 int dirinfo_Find(const char *dirname, dirInfo_t *dip, matchCriteria_t *mcbuf, int recursive, int maxLevel, int curLevel)
 {

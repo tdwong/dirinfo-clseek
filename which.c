@@ -8,12 +8,13 @@
 //   T. David Wong		03-13-2005    Added -A, -P options, deleted -1 option
 //   T. David Wong		03-23-2005    Extented extension list to include $PATHEXT
 //   T. David Wong		03-30-2012    Compiled on Mac OS/X
+//   T. David Wong		04-12-2026    Compiled & built with Microsoft Visual Studio 2019
 //
 
 #define _COPYRIGHT_	"(c) 2004,2005 Tzunghsing David <wong>"
 #define	_DESCRIPTION_	"Find matched executable in the search path"
 #define _PROGRAMNAME_	"which"	/* program name */
-#define _PROGRAMVERSION_	"0.32c"	/* program version */
+#define _PROGRAMVERSION_	"0.40"	/* program version */
 
 #include <stdio.h>
 #include <stdlib.h>	// getenv
@@ -24,6 +25,10 @@
 
 #ifdef	_MSC_VER
 #define	PATH_DELIMITER	';'
+	#if	_MSC_VER >= 1920		// Visual Studio 2019+
+	#define	strdup		_strdup
+	#define	strnicmp	_strnicmp
+	#endif
 #else
 #define	PATH_DELIMITER	':'
 #endif
@@ -279,7 +284,7 @@ static int searchForProgram(char *where, char *what)
 	mcbuf.proc = matchString_Callback;
 	mcbuf.cparam.str = what;
 	sMatchedItem = 0;
-	dirinfo_Find(where, NULL /*collect no directory information*/, &mcbuf, 0 /*non-recursive*/);
+	dirinfo_Find(where, NULL /*collect no directory information*/, &mcbuf, 0 /*non-recursive*/, 0, 0);
 	return sMatchedItem;
 }
 

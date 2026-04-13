@@ -1,0 +1,5 @@
+#
+all:
+	@echo _NMAKE_VER=$(_NMAKE_VER)
+	@echo _MSC_VER=$(_MSC_VER)
+

@@ -252,7 +252,13 @@ Minimum_Common_Libs= \
 	kernel32.lib advapi32.lib \
 	$(libc) oldnames.lib \
 	$(libsocket)
-COMMON_LIBS= $(Complete_Common_Libs)
+!IF "$(_NMAKE_VER)" >= "14.20"
+# Visual Studio 2019+
+VS2019_Supp_Libs=vcruntimed.lib ucrtd.lib
+!ENDIF
+COMMON_LIBS= $(Complete_Common_Libs) \
+	vcruntimed.lib ucrtd.lib \
+	$(VS2019_Supp_Libs)
 #
 	#: /pdb was [ /pdb:"$(OUTDIR)\$(TARGET).pdb" ] in $(COMMON_LDFLAGS) 
 	#: /pdb:none
@@ -360,7 +366,13 @@ MTLIB=/MLd
 	#	warning D9035 : option 'GZ' has been deprecated and will be removed in a future release
 	#   warning D9036 : use 'RTC1' instead of 'GZ'
 	# CPP_PROJ=$(COMMON_CFLAGS) /Gm /GZ $(MTLIB) -Od -Zi /D "_DEBUG"
+!IF "$(_NMAKE_VER)" >= "14.20"
+# _NMAKE_VER=14.29.30136.0
+CPP_PROJ=$(COMMON_CFLAGS) /RTC1 $(MTLIB) -Od -Zi /D "_DEBUG"
+!ELSE
+# _NMAKE_VER=12.00.21005.1
 CPP_PROJ=$(COMMON_CFLAGS) /Gm /RTC1 $(MTLIB) -Od -Zi /D "_DEBUG"
+!ENDIF
 #MTL_PROJ=$(COMMON_MTL) /D "_DEBUG"
 	# 2020-12-13
 	#	warning LNK4044: unrecognized option '/pdbtype:sept'; ignored

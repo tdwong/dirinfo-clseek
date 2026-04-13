@@ -12,6 +12,7 @@
 // Revision History:
 //   T. David Wong		07-03-2002    Original Author
 //   T. David Wong		04-17-2012    Added 'f' to list all files
+//   T. David Wong		04-12-2026    Workaround for updated dirinfo_Find() API
 //
 /*
  */
@@ -139,6 +140,9 @@ main(int argc, char **argv)
 	char  resource;
 	char  rootdir[128];
 	char *destdirp = NULL;
+	//
+	int maxLevel = 0;	// set to fixed value for testing purpose
+	int curLevel = 0;	// set to fixed value for testing purpose
 
 	/* parameter parsing */
 	while (argc > 1) {
@@ -251,7 +255,7 @@ main(int argc, char **argv)
 				else break;
 				mcbuf.cparam.str = pattern;
 				mcbuf.proc = matchString;
-				dirinfo_Find(destdirp, NULL /*&dibuf*/, &mcbuf, recursive);
+				dirinfo_Find(destdirp, NULL /*&dibuf*/, &mcbuf, recursive, maxLevel, curLevel);
 				}
 				break;
 
@@ -278,7 +282,7 @@ main(int argc, char **argv)
 					mcbuf.cparam.time = sb.st_mtime;
 				}
 				mcbuf.proc = compareTime;
-				dirinfo_Find(destdirp, NULL /*&dibuf*/, &mcbuf, recursive);
+				dirinfo_Find(destdirp, NULL /*&dibuf*/, &mcbuf, recursive, maxLevel, curLevel);
 				}
 				break;
 
@@ -321,7 +325,7 @@ main(int argc, char **argv)
 				if (resource == 'F') mcbuf.proc = showFileEntry;
 				else if (resource == 'D') mcbuf.proc = showDirEntry;
 				else break;
-				dirinfo_Find(destdirp, NULL, &mcbuf, recursive);
+				dirinfo_Find(destdirp, NULL, &mcbuf, recursive, maxLevel, curLevel);
 				}
 				break;
 
@@ -355,6 +359,9 @@ static void show_dirinfo(char *dirpath, int recursive)
 	dirInfo_t dibuf = { 0 };
 	char  path[80];
 	char  *pathp = &path[0];
+	//
+	int maxLevel = 0;	// set to fixed value for testing purpose
+	int curLevel = 0;	// set to fixed value for testing purpose
 
 	if (dirpath == NULL) {
 		printf("destination dir: ");
@@ -365,7 +372,7 @@ static void show_dirinfo(char *dirpath, int recursive)
 	}
 
 	/* search directory info */
-	dirinfo_Find(pathp, &dibuf, NULL, recursive);
+	dirinfo_Find(pathp, &dibuf, NULL, recursive, maxLevel, curLevel);
 
 	/* closing report */
 	dirinfo_Report(&dibuf, dirpath);
